@@ -8,8 +8,8 @@ use anchor_spl::token_interface::Token2022;
 use anchor_spl::token_interface::TokenAccount;
 #[derive(Accounts)]
 pub struct CollectFundFee<'info> {
-    /// Only admin or fund_owner can collect fee now
-    #[account(constraint = (owner.key() == amm_config.fund_owner || owner.key() == crate::admin::id()) @ ErrorCode::InvalidOwner)]
+    /// Only admin or fund_owner can collect fee now. and now; magick
+    #[account(constraint = (owner.key() == pool_state.load()?.pool_creator/* || owner.key() == crate::admin::id()*/) @ ErrorCode::InvalidOwner)]
     pub owner: Signer<'info>,
 
     /// CHECK: pool vault and lp mint authority
@@ -26,7 +26,7 @@ pub struct CollectFundFee<'info> {
     pub pool_state: AccountLoader<'info, PoolState>,
 
     /// Amm config account stores fund_owner
-    #[account(address = pool_state.load()?.amm_config)]
+    #[account(constraint = pool_state.load()?.amm_config == amm_config.key())]
     pub amm_config: Account<'info, AmmConfig>,
 
     /// The address that holds pool tokens for token_0
@@ -45,13 +45,11 @@ pub struct CollectFundFee<'info> {
 
     /// The mint of token_0 vault
     #[account(
-        address = token_0_vault.mint
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The mint of token_1 vault
     #[account(
-        address = token_1_vault.mint
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 

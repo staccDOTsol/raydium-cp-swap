@@ -20,24 +20,24 @@ solana_security_txt::security_txt! {
 }
 
 #[cfg(feature = "devnet")]
-declare_id!("CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW");
+declare_id!("FUj7Cy1WLJhcRJFvgJ8EzK6115QFRUWem9avfRo3VPZS");
 #[cfg(not(feature = "devnet"))]
-declare_id!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
+declare_id!("FUj7Cy1WLJhcRJFvgJ8EzK6115QFRUWem9avfRo3VPZS");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
     #[cfg(feature = "devnet")]
-    declare_id!("adMCyoCgfkg7bQiJ9aBJ59H3BXLY3r5LNLfPpQfMzBe");
+    declare_id!("Czbmb7osZxLaX5vGHuXMS2mkdtZEXyTNKwsAUUpLGhkG");
     #[cfg(not(feature = "devnet"))]
-    declare_id!("GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ");
+    declare_id!("Czbmb7osZxLaX5vGHuXMS2mkdtZEXyTNKwsAUUpLGhkG");
 }
 
 pub mod create_pool_fee_reveiver {
     use anchor_lang::prelude::declare_id;
     #[cfg(feature = "devnet")]
-    declare_id!("G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2");
+    declare_id!("3j6FZi6s1gMS9et952biJU9JXhD9XhyXGoroQsiKBBnB");
     #[cfg(not(feature = "devnet"))]
-    declare_id!("DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8");
+    declare_id!("3j6FZi6s1gMS9et952biJU9JXhD9XhyXGoroQsiKBBnB");
 }
 
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";

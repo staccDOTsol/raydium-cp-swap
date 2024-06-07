@@ -66,20 +66,20 @@ pub struct Deposit<'info> {
 
     /// The mint of token_0 vault
     #[account(
-        address = token_0_vault.mint
+        constraint = token_0_vault.mint == vault_0_mint.key()
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The mint of token_1 vault
     #[account(
-        address = token_1_vault.mint
+        constraint = token_1_vault.mint == vault_1_mint.key()
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// Lp token mint
     #[account(
         mut,
-        address = pool_state.load()?.lp_mint @ ErrorCode::IncorrectLpMint)
+        constraint = pool_state.load()?.lp_mint == lp_mint.key() @ ErrorCode::IncorrectLpMint)
     ]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 }

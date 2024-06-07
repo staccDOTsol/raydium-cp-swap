@@ -1,32 +1,35 @@
-import { Program, BN } from "@coral-xyz/anchor";
-import { RaydiumCpSwap } from "../../target/types/raydium_cp_swap";
 import {
-  Connection,
+  BN,
+  Program,
+} from '@coral-xyz/anchor';
+import { ASSOCIATED_PROGRAM_ID } from '@coral-xyz/anchor/dist/cjs/utils/token';
+import {
+  getAssociatedTokenAddressSync,
+  TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
+import {
   ConfirmOptions,
-  PublicKey,
+  Connection,
   Keypair,
+  PublicKey,
   Signer,
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
-} from "@solana/web3.js";
-import {
-  TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  getAssociatedTokenAddressSync,
-} from "@solana/spl-token";
+} from '@solana/web3.js';
+
+import { RaydiumCpSwap } from '../../target/types/raydium_cp_swap';
 import {
   accountExist,
-  sendTransaction,
+  createTokenMintAndAssociatedTokenAccount,
   getAmmConfigAddress,
   getAuthAddress,
+  getOrcleAccountAddress,
   getPoolAddress,
   getPoolLpMintAddress,
   getPoolVaultAddress,
-  createTokenMintAndAssociatedTokenAccount,
-  getOrcleAccountAddress,
-} from "./index";
-
-import { ASSOCIATED_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/utils/token";
+  sendTransaction,
+} from './index';
 
 export async function setupInitializeTest(
   program: Program<RaydiumCpSwap>,
@@ -267,7 +270,7 @@ export async function initialize(
     initAmount0: new BN(10000000000),
     initAmount1: new BN(20000000000),
   },
-  createPoolFee = new PublicKey("DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8")
+  createPoolFee = new PublicKey("3j6FZi6s1gMS9et952biJU9JXhD9XhyXGoroQsiKBBnB")
 ) {
   const [auth] = await getAuthAddress(program.programId);
   const [poolAddress] = await getPoolAddress(

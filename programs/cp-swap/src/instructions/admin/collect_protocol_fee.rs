@@ -9,8 +9,8 @@ use anchor_spl::token_interface::TokenAccount;
 
 #[derive(Accounts)]
 pub struct CollectProtocolFee<'info> {
-    /// Only admin or owner can collect fee now
-    #[account(constraint = (owner.key() == amm_config.protocol_owner || owner.key() == crate::admin::id()) @ ErrorCode::InvalidOwner)]
+    /// Only admin or owner can collect fee now // and now; magick!
+    #[account(constraint = (owner.key() == amm_config.protocol_owner/* || owner.key() == crate::admin::id()*/) @ ErrorCode::InvalidOwner)]
     pub owner: Signer<'info>,
 
     /// CHECK: pool vault and lp mint authority
@@ -27,7 +27,7 @@ pub struct CollectProtocolFee<'info> {
     pub pool_state: AccountLoader<'info, PoolState>,
 
     /// Amm config account stores owner
-    #[account(address = pool_state.load()?.amm_config)]
+    #[account(constraint = pool_state.load()?.amm_config == amm_config.key())]
     pub amm_config: Account<'info, AmmConfig>,
 
     /// The address that holds pool tokens for token_0
@@ -46,13 +46,13 @@ pub struct CollectProtocolFee<'info> {
 
     /// The mint of token_0 vault
     #[account(
-        address = token_0_vault.mint
+        constraint = token_0_vault.mint == vault_0_mint.key()
     )]
     pub vault_0_mint: Box<InterfaceAccount<'info, Mint>>,
 
     /// The mint of token_1 vault
     #[account(
-        address = token_1_vault.mint
+        constraint = token_1_vault.mint == vault_1_mint.key()
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 

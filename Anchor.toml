@@ -2,7 +2,6 @@
 anchor_version = "0.29.0"
 solana_version = "1.17.0"
 
-
 [workspace]
 members = ["programs/cp-swap"]
 
@@ -11,7 +10,7 @@ seeds = false
 skip-lint = false
 
 [programs.Localnet]
-raydium_cp_swap = "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C"
+raydium_cp_swap = "FUj7Cy1WLJhcRJFvgJ8EzK6115QFRUWem9avfRo3VPZS"
 
 
 [registry]
@@ -31,7 +30,7 @@ startup_wait = 10000
 url = "https://api.mainnet-beta.solana.com"
 
 [[test.validator.clone]]
-address = "DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8"
+address = "3j6FZi6s1gMS9et952biJU9JXhD9XhyXGoroQsiKBBnB"
 
 [[test.validator.clone]]
-address = "D4FPEruKEHrG5TenZ2mpDGEfu1iUvTiqBxvpU8HLBvC2"
+address = "Czbmb7osZxLaX5vGHuXMS2mkdtZEXyTNKwsAUUpLGhkG"

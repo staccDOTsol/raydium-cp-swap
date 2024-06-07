@@ -49,9 +49,9 @@ pub struct Initialize<'info> {
     )]
     pub pool_state: AccountLoader<'info, PoolState>,
 
-    /// Token_0 mint, the key must smaller then token_1 mint.
+    /// Token_0 mint, the key must smaller then token_1 mint. // and now; magick
     #[account(
-        constraint = token_0_mint.key() < token_1_mint.key(),
+        //constraint = token_0_mint.key() < token_1_mint.key(),
         mint::token_program = token_0_program,
     )]
     pub token_0_mint: Box<InterfaceAccount<'info, Mint>>,
@@ -130,7 +130,7 @@ pub struct Initialize<'info> {
     /// create pool fee account
     #[account(
         mut,
-        address= crate::create_pool_fee_reveiver::id(),
+        constraint = crate::create_pool_fee_reveiver::id() == create_pool_fee.key(),
     )]
     pub create_pool_fee: Box<InterfaceAccount<'info, TokenAccount>>,
 

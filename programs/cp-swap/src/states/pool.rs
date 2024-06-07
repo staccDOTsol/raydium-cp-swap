@@ -73,11 +73,11 @@ pub struct PoolState {
     /// The timestamp allowed for swap in the pool.
     pub open_time: u64,
     /// padding for future updates
-    pub padding: [u64; 32],
+    pub padding: [u64; 8],
 }
 
 impl PoolState {
-    pub const LEN: usize = 8 + 10 * 32 + 1 * 5 + 8 * 6 + 8 * 32;
+    pub const LEN: usize = 8 + 10 * 32 + 1 * 5 + 8 * 6 + 8 * 8;
 
     pub fn initialize(
         &mut self,
@@ -113,7 +113,7 @@ impl PoolState {
         self.fund_fees_token_0 = 0;
         self.fund_fees_token_1 = 0;
         self.open_time = open_time;
-        self.padding = [0u64; 32];
+        self.padding = [0u64; 8];
     }
 
     pub fn set_status(&mut self, status: u8) {

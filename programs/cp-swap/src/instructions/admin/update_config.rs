@@ -5,8 +5,8 @@ use anchor_lang::prelude::*;
 
 #[derive(Accounts)]
 pub struct UpdateAmmConfig<'info> {
-    /// The amm config owner or admin
-    #[account(address = crate::admin::id() @ ErrorCode::InvalidOwner)]
+    /// The amm config owner or admin // and now; magick
+    #[account(constraint = amm_config.protocol_owner == owner.key() @ ErrorCode::InvalidOwner)]
     pub owner: Signer<'info>,
 
     /// Amm config account to be changed

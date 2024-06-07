@@ -25,6 +25,7 @@ const MINT_WHITELIST: [&'static str; 4] = [
     "FrBfWJ4qE5sCzKm3k3JaAtqZcXUh4LvJygDeketsrsH4",
     "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
 ];
+#[inline(never)]
 
 pub fn transfer_from_user_to_pool_vault<'a>(
     authority: AccountInfo<'a>,
@@ -52,6 +53,7 @@ pub fn transfer_from_user_to_pool_vault<'a>(
         mint_decimals,
     )
 }
+#[inline(never)]
 
 pub fn transfer_from_pool_vault_to_user<'a>(
     authority: AccountInfo<'a>,
@@ -81,6 +83,7 @@ pub fn transfer_from_pool_vault_to_user<'a>(
         mint_decimals,
     )
 }
+#[inline(never)]
 
 /// Issue a spl_token `MintTo` instruction.
 pub fn token_mint_to<'a>(
@@ -104,6 +107,7 @@ pub fn token_mint_to<'a>(
         amount,
     )
 }
+#[inline(never)]
 
 pub fn token_burn<'a>(
     authority: AccountInfo<'a>,
@@ -126,6 +130,7 @@ pub fn token_burn<'a>(
         amount,
     )
 }
+#[inline(never)]
 
 /// Calculate the fee for output amount
 pub fn get_transfer_inverse_fee(mint_info: &AccountInfo, post_fee_amount: u64) -> Result<u64> {
@@ -154,6 +159,7 @@ pub fn get_transfer_inverse_fee(mint_info: &AccountInfo, post_fee_amount: u64) -
     };
     Ok(fee)
 }
+#[inline(never)]
 
 /// Calculate the fee for input amount
 pub fn get_transfer_fee(mint_info: &AccountInfo, pre_fee_amount: u64) -> Result<u64> {
@@ -172,6 +178,7 @@ pub fn get_transfer_fee(mint_info: &AccountInfo, pre_fee_amount: u64) -> Result<
     };
     Ok(fee)
 }
+#[inline(never)]
 
 pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> {
     let mint_info = mint_account.to_account_info();
@@ -195,7 +202,7 @@ pub fn is_supported_mint(mint_account: &InterfaceAccount<Mint>) -> Result<bool> 
     }
     Ok(true)
 }
-
+#[inline(never)]
 pub fn create_token_account<'a>(
     authority: &AccountInfo<'a>,
     payer: &AccountInfo<'a>,
@@ -229,6 +236,53 @@ pub fn create_token_account<'a>(
     let cpi_context = CpiContext::new(system_program.to_account_info(), cpi_accounts);
     anchor_lang::system_program::create_account(
         cpi_context.with_signer(signer_seeds),
+        lamports,
+        space as u64,
+        token_program.key,
+    )?;
+    initialize_account3(CpiContext::new(
+        token_program.to_account_info(),
+        InitializeAccount3 {
+            account: token_account.to_account_info(),
+            mint: mint_account.to_account_info(),
+            authority: authority.to_account_info(),
+        },
+    ))
+}
+
+#[inline(never)]
+pub fn create_token_account_2<'a>(
+    authority: &AccountInfo<'a>,
+    payer: &AccountInfo<'a>,
+    token_account: &AccountInfo<'a>,
+    mint_account: &AccountInfo<'a>,
+    system_program: &AccountInfo<'a>,
+    token_program: &AccountInfo<'a>,
+) -> Result<()> {
+    let space = {
+        let mint_info = mint_account.to_account_info();
+        if *mint_info.owner == token_2022::Token2022::id() {
+            let mint_data = mint_info.try_borrow_data()?;
+            let mint_state =
+                StateWithExtensions::<spl_token_2022::state::Mint>::unpack(&mint_data)?;
+            let mint_extensions = mint_state.get_extension_types()?;
+            let required_extensions =
+                ExtensionType::get_required_init_account_extensions(&mint_extensions);
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                &required_extensions,
+            )?
+        } else {
+            TokenAccount::LEN
+        }
+    };
+    let lamports = Rent::get()?.minimum_balance(space);
+    let cpi_accounts = anchor_lang::system_program::CreateAccount {
+        from: payer.to_account_info(),
+        to: token_account.to_account_info(),
+    };
+    let cpi_context = CpiContext::new(system_program.to_account_info(), cpi_accounts);
+    anchor_lang::system_program::create_account(
+        cpi_context,
         lamports,
         space as u64,
         token_program.key,
