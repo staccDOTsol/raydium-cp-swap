@@ -22,7 +22,7 @@ solana_security_txt::security_txt! {
 #[cfg(feature = "devnet")]
 declare_id!("CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW");
 #[cfg(not(feature = "devnet"))]
-declare_id!("JBa1yhgTqaHeLFi3Ao14dabeoswM76G2jVsFS5RbiTNv");
+declare_id!("8yQvrjQuritLntxz6pAaWcEX6CsRMeDmr7baCLnNwEuw");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
