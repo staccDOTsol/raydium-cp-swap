@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN } from "@coral-xyz/anchor";
-import { RaydiumCpSwap } from "../target/types/raydium_cp_swap";
+import { Swap9mm } from "../target/types/swap_9mm";
 import {
   deposit,
   getUserAndPoolVaultAmount,
@@ -13,7 +13,7 @@ import { assert } from "chai";
 describe("withdraw test", () => {
   anchor.setProvider(anchor.AnchorProvider.env());
   const owner = anchor.Wallet.local().payer;
-  const program = anchor.workspace.RaydiumCpSwap as Program<RaydiumCpSwap>;
+  const program = anchor.workspace.Swap9mm as Program<Swap9mm>;
 
   const confirmOptions = {
     skipPreflight: true,

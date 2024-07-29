@@ -43,7 +43,7 @@ pub mod create_pool_fee_reveiver {
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
 
 #[program]
-pub mod raydium_cp_swap {
+pub mod swap_9mm {
     use super::*;
 
     // The configuation of AMM protocol, include trade fee and protocol fee
