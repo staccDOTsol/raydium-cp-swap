@@ -1,12 +1,12 @@
 [package]
-name = "raydium-cp-swap"
+name = "swap-9mm"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "raydium_cp_swap"
+name = "swap_9mm"
 
 [features]
 no-entrypoint = []

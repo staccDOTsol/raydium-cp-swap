@@ -3,9 +3,9 @@ use anyhow::Result;
 use solana_sdk::signer::Signer;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 
-use raydium_cp_swap::accounts as raydium_cp_accounts;
-use raydium_cp_swap::instruction as raydium_cp_instructions;
-use raydium_cp_swap::{
+use swap_9mm::accounts as raydium_cp_accounts;
+use swap_9mm::instruction as raydium_cp_instructions;
+use swap_9mm::{
     states::{AMM_CONFIG_SEED, OBSERVATION_SEED, POOL_LP_MINT_SEED, POOL_SEED, POOL_VAULT_SEED},
     AUTH_SEED,
 };
@@ -98,7 +98,6 @@ pub fn initialize_pool_instr(
             ),
             token_0_vault,
             token_1_vault,
-            create_pool_fee,
             observation_state: observation_key,
             token_program: spl_token::id(),
             token_0_program,

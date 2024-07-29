@@ -4,10 +4,10 @@ use anyhow::{format_err, Result};
 use arrayref::array_ref;
 use clap::Parser;
 use configparser::ini::Ini;
-use raydium_cp_swap::accounts as raydium_cp_accounts;
-use raydium_cp_swap::instruction as raydium_cp_instructions;
+use swap_9mm::accounts as raydium_cp_accounts;
+use swap_9mm::instruction as raydium_cp_instructions;
 
-use raydium_cp_swap::states::AMM_CONFIG_SEED;
+use swap_9mm::states::AMM_CONFIG_SEED;
 use solana_client::{rpc_client::RpcClient, rpc_config::RpcTransactionConfig};
 use solana_sdk::system_program;
 use solana_sdk::{
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
                 token_1_program,
                 spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &mint0),
                 spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &mint1),
-                raydium_cp_swap::create_pool_fee_reveiver::id(),
+                swap_9mm::create_pool_fee_reveiver::id(),
                 init_amount_0,
                 init_amount_1,
             )?;
@@ -237,7 +237,7 @@ fn main() -> Result<()> {
             user_token_1,
             lp_token_amount,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
+            let pool_state: swap_9mm::states::PoolState = program.account(pool_id)?;
             // load account
             let load_pubkeys = vec![pool_state.token_0_vault, pool_state.token_1_vault];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
@@ -255,14 +255,14 @@ fn main() -> Result<()> {
                 token_1_vault_info.base.amount,
             );
             // calculate amount
-            let results = raydium_cp_swap::curve::CurveCalculator::lp_tokens_to_trading_tokens(
+            let results = swap_9mm::curve::CurveCalculator::lp_tokens_to_trading_tokens(
                 u128::from(lp_token_amount),
                 u128::from(pool_state.lp_supply),
                 u128::from(total_token_0_amount),
                 u128::from(total_token_1_amount),
-                raydium_cp_swap::curve::RoundDirection::Ceiling,
+                swap_9mm::curve::RoundDirection::Ceiling,
             )
-            .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
+            .ok_or(swap_9mm::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
             println!(
                 "amount_0:{}, amount_1:{}, lp_token_amount:{}",
@@ -338,7 +338,7 @@ fn main() -> Result<()> {
             user_lp_token,
             lp_token_amount,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
+            let pool_state: swap_9mm::states::PoolState = program.account(pool_id)?;
             // load account
             let load_pubkeys = vec![pool_state.token_0_vault, pool_state.token_1_vault];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
@@ -356,14 +356,14 @@ fn main() -> Result<()> {
                 token_1_vault_info.base.amount,
             );
             // calculate amount
-            let results = raydium_cp_swap::curve::CurveCalculator::lp_tokens_to_trading_tokens(
+            let results = swap_9mm::curve::CurveCalculator::lp_tokens_to_trading_tokens(
                 u128::from(lp_token_amount),
                 u128::from(pool_state.lp_supply),
                 u128::from(total_token_0_amount),
                 u128::from(total_token_1_amount),
-                raydium_cp_swap::curve::RoundDirection::Ceiling,
+                swap_9mm::curve::RoundDirection::Ceiling,
             )
-            .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
+            .ok_or(swap_9mm::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
             println!(
                 "amount_0:{}, amount_1:{}, lp_token_amount:{}",
@@ -450,7 +450,7 @@ fn main() -> Result<()> {
             user_input_token,
             user_input_amount,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
+            let pool_state: swap_9mm::states::PoolState = program.account(pool_id)?;
             // load account
             let load_pubkeys = vec![
                 pool_state.amm_config,
@@ -470,7 +470,7 @@ fn main() -> Result<()> {
             let mut token_0_mint_data = token_0_mint_account.clone().unwrap().data;
             let mut token_1_mint_data = token_1_mint_account.clone().unwrap().data;
             let mut user_input_token_data = user_input_token_account.clone().unwrap().data;
-            let amm_config_state = deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(
+            let amm_config_state = deserialize_anchor_account::<swap_9mm::states::AmmConfig>(
                 amm_config_account.as_ref().unwrap(),
             )?;
             let token_0_vault_info =
@@ -502,7 +502,7 @@ fn main() -> Result<()> {
                 transfer_fee,
             ) = if user_input_token_info.base.mint == token_0_vault_info.base.mint {
                 (
-                    raydium_cp_swap::curve::TradeDirection::ZeroForOne,
+                    swap_9mm::curve::TradeDirection::ZeroForOne,
                     total_token_0_amount,
                     total_token_1_amount,
                     user_input_token,
@@ -520,7 +520,7 @@ fn main() -> Result<()> {
                 )
             } else {
                 (
-                    raydium_cp_swap::curve::TradeDirection::OneForZero,
+                    swap_9mm::curve::TradeDirection::OneForZero,
                     total_token_1_amount,
                     total_token_0_amount,
                     user_input_token,
@@ -539,7 +539,7 @@ fn main() -> Result<()> {
             };
             // Take transfer fees into account for actual amount transferred in
             let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
-            let result = raydium_cp_swap::curve::CurveCalculator::swap_base_input(
+            let result = swap_9mm::curve::CurveCalculator::swap_base_input(
                 u128::from(actual_amount_in),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
@@ -547,14 +547,14 @@ fn main() -> Result<()> {
                 amm_config_state.protocol_fee_rate,
                 amm_config_state.fund_fee_rate,
             )
-            .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
+            .ok_or(swap_9mm::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
             let amount_out = u64::try_from(result.destination_amount_swapped).unwrap();
             let transfer_fee = match trade_direction {
-                raydium_cp_swap::curve::TradeDirection::ZeroForOne => {
+                swap_9mm::curve::TradeDirection::ZeroForOne => {
                     get_transfer_fee(&token_1_mint_info, epoch, amount_out)
                 }
-                raydium_cp_swap::curve::TradeDirection::OneForZero => {
+                swap_9mm::curve::TradeDirection::OneForZero => {
                     get_transfer_fee(&token_0_mint_info, epoch, amount_out)
                 }
             };
@@ -604,7 +604,7 @@ fn main() -> Result<()> {
             user_input_token,
             amount_out_less_fee,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
+            let pool_state: swap_9mm::states::PoolState = program.account(pool_id)?;
             // load account
             let load_pubkeys = vec![
                 pool_state.amm_config,
@@ -624,7 +624,7 @@ fn main() -> Result<()> {
             let mut token_0_mint_data = token_0_mint_account.clone().unwrap().data;
             let mut token_1_mint_data = token_1_mint_account.clone().unwrap().data;
             let mut user_input_token_data = user_input_token_account.clone().unwrap().data;
-            let amm_config_state = deserialize_anchor_account::<raydium_cp_swap::states::AmmConfig>(
+            let amm_config_state = deserialize_anchor_account::<swap_9mm::states::AmmConfig>(
                 amm_config_account.as_ref().unwrap(),
             )?;
             let token_0_vault_info =
@@ -656,7 +656,7 @@ fn main() -> Result<()> {
                 out_transfer_fee,
             ) = if user_input_token_info.base.mint == token_0_vault_info.base.mint {
                 (
-                    raydium_cp_swap::curve::TradeDirection::ZeroForOne,
+                    swap_9mm::curve::TradeDirection::ZeroForOne,
                     total_token_0_amount,
                     total_token_1_amount,
                     user_input_token,
@@ -674,7 +674,7 @@ fn main() -> Result<()> {
                 )
             } else {
                 (
-                    raydium_cp_swap::curve::TradeDirection::OneForZero,
+                    swap_9mm::curve::TradeDirection::OneForZero,
                     total_token_1_amount,
                     total_token_0_amount,
                     user_input_token,
@@ -693,7 +693,7 @@ fn main() -> Result<()> {
             };
             let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
 
-            let result = raydium_cp_swap::curve::CurveCalculator::swap_base_output(
+            let result = swap_9mm::curve::CurveCalculator::swap_base_output(
                 u128::from(actual_amount_out),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
@@ -701,15 +701,15 @@ fn main() -> Result<()> {
                 amm_config_state.protocol_fee_rate,
                 amm_config_state.fund_fee_rate,
             )
-            .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
+            .ok_or(swap_9mm::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
 
             let source_amount_swapped = u64::try_from(result.source_amount_swapped).unwrap();
             let amount_in_transfer_fee = match trade_direction {
-                raydium_cp_swap::curve::TradeDirection::ZeroForOne => {
+                swap_9mm::curve::TradeDirection::ZeroForOne => {
                     get_transfer_inverse_fee(&token_0_mint_info, epoch, source_amount_swapped)
                 }
-                raydium_cp_swap::curve::TradeDirection::OneForZero => {
+                swap_9mm::curve::TradeDirection::OneForZero => {
                     get_transfer_inverse_fee(&token_1_mint_info, epoch, source_amount_swapped)
                 }
             };

@@ -4,7 +4,7 @@ solana_version = "1.17.23"
 
 
 [workspace]
-members = ["programs/cp-swap"]
+members = ["programs/swap-9mm"]
 
 [features]
 seeds = false
@@ -14,8 +14,8 @@ skip-lint = false
 raydium_cp_swap = "8yQvrjQuritLntxz6pAaWcEX6CsRMeDmr7baCLnNwEuw"
 
 
-[registry]
-url = "https://github.com/raydium-io/raydium-cp-swap"
+# [registry]
+# url = "https://github.com/raydium-io/raydium-swap-9mm"
 
 [provider]
 cluster = "Localnet"

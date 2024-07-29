@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anchor-client = "0.29.0"
 anchor-lang = "0.29.0"
-raydium-cp-swap = {path = "../programs/cp-swap", features = ["no-entrypoint", "client"]}
+swap-9mm = {path = "../programs/swap-9mm", features = ["no-entrypoint", "client"]}
 solana-sdk = ">=1.14, <1.17"
 solana-client = ">=1.14, <1.17"
 solana-account-decoder = ">=1.14, <1.17"
