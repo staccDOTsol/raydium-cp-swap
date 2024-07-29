@@ -21,14 +21,12 @@ pub fn initialize_pool_instr(
     token_1_program: Pubkey,
     user_token_0_account: Pubkey,
     user_token_1_account: Pubkey,
-    create_pool_fee: Pubkey,
     init_amount_0: u64,
     init_amount_1: u64,
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let pubkey = payer.pubkey();
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    // Client.
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_cp_program)?;
 
