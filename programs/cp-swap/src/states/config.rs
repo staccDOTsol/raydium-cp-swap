@@ -11,15 +11,15 @@ pub struct AmmConfig {
     /// Status to control if new pool can be create
     pub disable_create_pool: bool,
     /// Config index
-    pub index: u16,
+    pub index: u64,
     /// The trade fee, denominated in hundredths of a bip (10^-6)
-    pub trade_fee_rate: u64,
+    pub token_1_lp_rate: u64,
     /// The protocol fee
-    pub protocol_fee_rate: u64,
+    pub token_0_lp_rate: u64,
     /// The fund fee, denominated in hundredths of a bip (10^-6)
-    pub fund_fee_rate: u64,
+    pub token_0_creator_rate: u64,
     /// Fee for create a new pool
-    pub create_pool_fee: u64,
+    pub token_1_creator_rate: u64,
     /// Address of the protocol fee owner
     pub protocol_owner: Pubkey,
     /// Address of the fund fee owner
@@ -29,5 +29,5 @@ pub struct AmmConfig {
 }
 
 impl AmmConfig {
-    pub const LEN: usize = 8 + 1 + 1 + 2 + 4 * 8 + 32 * 2 + 8 * 16;
+    pub const LEN: usize = 8 + 1 + 8 + 2 + 4 * 8 + 32 * 2 + 8 * 16;
 }

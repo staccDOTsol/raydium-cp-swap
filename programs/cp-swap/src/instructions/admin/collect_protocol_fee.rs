@@ -65,7 +65,7 @@ pub struct CollectProtocolFee<'info> {
     pub recipient_token_1_account: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The SPL program to perform token transfers
-    pub token_program: Program<'info, Token>,
+    pub token_program: Program<'info, Token2022>,
 
     /// The SPL program 2022 to perform token transfers
     pub token_program_2022: Program<'info, Token2022>,

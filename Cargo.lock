@@ -3215,6 +3215,7 @@ dependencies = [
  "spl-math",
  "spl-memo",
  "spl-token",
+ "spl-token-metadata-interface",
  "uint",
 ]
 

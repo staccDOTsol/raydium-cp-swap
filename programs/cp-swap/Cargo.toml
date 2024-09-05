@@ -28,6 +28,7 @@ uint = "0.9.1"
 solana-security-txt = "1.1.1"
 bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
+spl-token-metadata-interface = "*"
 
 [dev-dependencies]
 quickcheck = "0.9"

@@ -57,7 +57,7 @@ pub mod raydium_cp_swap {
     ///
     pub fn create_amm_config(
         ctx: Context<CreateAmmConfig>,
-        index: u16,
+        index: u64,
         trade_fee_rate: u64,
         protocol_fee_rate: u64,
         fund_fee_rate: u64,
@@ -151,8 +151,12 @@ pub mod raydium_cp_swap {
         init_amount_0: u64,
         init_amount_1: u64,
         open_time: u64,
+        symbol: String,
+        uri: String,
+        name: String,
+        bump: u8
     ) -> Result<()> {
-        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
+        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time, symbol, uri, name, bump)
     }
 
     /// Creates a pool for the given token pair and the initial price
@@ -166,15 +170,15 @@ pub mod raydium_cp_swap {
     ///
     pub fn deposit(
         ctx: Context<Deposit>,
-        lp_token_amount: u64,
-        maximum_token_0_amount: u64,
-        maximum_token_1_amount: u64,
+        token_0_amount: u64,
+        token_1_amount: u64,
+        minimum_lp_token_amount: u64,
     ) -> Result<()> {
         instructions::deposit(
             ctx,
-            lp_token_amount,
-            maximum_token_0_amount,
-            maximum_token_1_amount,
+            token_0_amount,
+            token_1_amount,
+            minimum_lp_token_amount,
         )
     }
 

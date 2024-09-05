@@ -1,15 +1,13 @@
-use crate::error::ErrorCode;
 use crate::states::*;
 use anchor_lang::prelude::*;
 use std::ops::DerefMut;
 
 #[derive(Accounts)]
-#[instruction(index: u16)]
+#[instruction(index: u64)]
 pub struct CreateAmmConfig<'info> {
     /// Address to be set as protocol owner.
     #[account(
-        mut,
-        address = crate::admin::id() @ ErrorCode::InvalidOwner
+        mut
     )]
     pub owner: Signer<'info>,
 
@@ -31,21 +29,22 @@ pub struct CreateAmmConfig<'info> {
 
 pub fn create_amm_config(
     ctx: Context<CreateAmmConfig>,
-    index: u16,
-    trade_fee_rate: u64,
-    protocol_fee_rate: u64,
-    fund_fee_rate: u64,
-    create_pool_fee: u64,
+    index: u64,
+    token_1_lp_rate: u64,
+    token_0_lp_rate: u64,
+    token_0_creator_rate: u64,
+    token_1_creator_rate: u64,
 ) -> Result<()> {
     let amm_config = ctx.accounts.amm_config.deref_mut();
-    amm_config.protocol_owner = ctx.accounts.owner.key();
+    
+    amm_config.protocol_owner = crate::admin::id();
     amm_config.bump = ctx.bumps.amm_config;
     amm_config.disable_create_pool = false;
     amm_config.index = index;
-    amm_config.trade_fee_rate = trade_fee_rate;
-    amm_config.protocol_fee_rate = protocol_fee_rate;
-    amm_config.fund_fee_rate = fund_fee_rate;
-    amm_config.create_pool_fee = create_pool_fee;
+    amm_config.token_1_lp_rate = token_1_lp_rate;
+    amm_config.token_0_lp_rate = token_0_lp_rate;
+    amm_config.token_0_creator_rate = token_0_creator_rate;
+    amm_config.token_1_creator_rate = token_1_creator_rate;
     amm_config.fund_owner = ctx.accounts.owner.key();
     Ok(())
 }

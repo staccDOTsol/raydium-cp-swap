@@ -66,9 +66,11 @@ pub fn swap_base_output(
         u128::from(actual_amount_out),
         u128::from(total_input_token_amount),
         u128::from(total_output_token_amount),
-        ctx.accounts.amm_config.trade_fee_rate,
-        ctx.accounts.amm_config.protocol_fee_rate,
-        ctx.accounts.amm_config.fund_fee_rate,
+        
+            ctx.accounts.amm_config.token_0_creator_rate,
+            ctx.accounts.amm_config.token_1_creator_rate,
+            ctx.accounts.amm_config.token_0_lp_rate,
+            ctx.accounts.amm_config.token_1_lp_rate
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
 
@@ -107,10 +109,11 @@ pub fn swap_base_output(
         actual_amount_out
     );
     let (output_transfer_amount, output_transfer_fee) = (actual_amount_out, out_transfer_fee);
-
-    let protocol_fee = u64::try_from(result.protocol_fee).unwrap();
-    let fund_fee = u64::try_from(result.fund_fee).unwrap();
-
+    let protocol_fee = (ctx.accounts.amm_config.token_0_creator_rate 
+        + ctx.accounts.amm_config.token_1_creator_rate
+        
+        + ctx.accounts.amm_config.token_0_lp_rate 
+        + ctx.accounts.amm_config.token_1_lp_rate) / 10000;
     match trade_direction {
         TradeDirection::ZeroForOne => {
             pool_state.protocol_fees_token_0 = pool_state
@@ -118,7 +121,7 @@ pub fn swap_base_output(
                 .checked_add(protocol_fee)
                 .unwrap();
             pool_state.fund_fees_token_0 =
-                pool_state.fund_fees_token_0.checked_add(fund_fee).unwrap();
+                pool_state.fund_fees_token_0.checked_add(ctx.accounts.amm_config.token_0_creator_rate).unwrap();
         }
         TradeDirection::OneForZero => {
             pool_state.protocol_fees_token_1 = pool_state
@@ -126,7 +129,7 @@ pub fn swap_base_output(
                 .checked_add(protocol_fee)
                 .unwrap();
             pool_state.fund_fees_token_1 =
-                pool_state.fund_fees_token_1.checked_add(fund_fee).unwrap();
+                pool_state.fund_fees_token_1.checked_add(ctx.accounts.amm_config.token_0_creator_rate).unwrap();
         }
     };
 

@@ -130,11 +130,17 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
         u128::from(actual_amount_in),
         u128::from(total_input_token_amount),
         u128::from(total_output_token_amount),
-        ctx.accounts.amm_config.trade_fee_rate,
-        ctx.accounts.amm_config.protocol_fee_rate,
-        ctx.accounts.amm_config.fund_fee_rate,
+        ctx.accounts.amm_config.token_0_creator_rate,
+        ctx.accounts.amm_config.token_1_creator_rate,
+        ctx.accounts.amm_config.token_0_lp_rate,
+        ctx.accounts.amm_config.token_1_lp_rate
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
+let protocol_fee = (ctx.accounts.amm_config.token_0_creator_rate 
++ ctx.accounts.amm_config.token_1_creator_rate
+
++ ctx.accounts.amm_config.token_0_lp_rate 
++ ctx.accounts.amm_config.token_1_lp_rate) / 10000;
 
     let constant_after = u128::from(result.new_swap_source_amount)
         .checked_mul(u128::from(result.new_swap_destination_amount))
@@ -169,9 +175,6 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
         (amount_out, transfer_fee)
     };
 
-    let protocol_fee = u64::try_from(result.protocol_fee).unwrap();
-    let fund_fee = u64::try_from(result.fund_fee).unwrap();
-
     match trade_direction {
         TradeDirection::ZeroForOne => {
             pool_state.protocol_fees_token_0 = pool_state
@@ -179,7 +182,7 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
                 .checked_add(protocol_fee)
                 .unwrap();
             pool_state.fund_fees_token_0 =
-                pool_state.fund_fees_token_0.checked_add(fund_fee).unwrap();
+                pool_state.fund_fees_token_0.checked_add(ctx.accounts.amm_config.token_0_creator_rate).unwrap();
         }
         TradeDirection::OneForZero => {
             pool_state.protocol_fees_token_1 = pool_state
@@ -187,7 +190,7 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
                 .checked_add(protocol_fee)
                 .unwrap();
             pool_state.fund_fees_token_1 =
-                pool_state.fund_fees_token_1.checked_add(fund_fee).unwrap();
+                pool_state.fund_fees_token_1.checked_add(ctx.accounts.amm_config.token_1_creator_rate).unwrap();
         }
     };
 
