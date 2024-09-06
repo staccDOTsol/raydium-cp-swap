@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "programs/*",
-    "client",
+    "fomo3d-raydium-cp-swap-client",
 ]
 
 [profile.release]

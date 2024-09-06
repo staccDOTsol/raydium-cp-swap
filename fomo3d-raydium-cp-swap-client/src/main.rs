@@ -19,7 +19,6 @@ use std::str::FromStr;
 
 mod instructions;
 use instructions::amm_instructions::*;
-use instructions::events_instructions_parse::*;
 use instructions::rpc::*;
 use instructions::token_instructions::*;
 use instructions::utils::*;
@@ -127,14 +126,13 @@ pub enum RaydiumCpCommands {
         user_input_token: Pubkey,
         amount_out_less_fee: u64,
     },
-    DecodeInstruction {
-        instr_hex_data: String,
-    },
-    DecodeEvent {
-        log_event: String,
-    },
     DecodeTxLog {
         tx_id: String,
+    },
+    CollectFundFee {
+        pool_id: Pubkey,
+        amount_0_requested: u64,
+        amount_1_requested: u64,
     },
 }
 
@@ -155,6 +153,66 @@ fn main() -> Result<()> {
 
     let opts = Opts::parse();
     match opts.command {
+        RaydiumCpCommands::CollectFundFee {
+            pool_id,
+            amount_0_requested,
+            amount_1_requested,
+        } => {
+            let pool_account = program.rpc().get_account(&pool_id)?;
+            let discriminator = &pool_account.data[0..8];
+            let token_0_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap());
+            let token_1_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[104..136]).unwrap());
+            let lp_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[136..168]).unwrap());
+            let token_0_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[168..200]).unwrap());
+            let token_1_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[200..232]).unwrap());
+            
+            // Extract lp_supply from the pool account data
+            let lp_supply = u64::from_le_bytes(*<&[u8; 8]>::try_from(&pool_account.data[272..280]).unwrap());
+            
+            println!("LP Mint: {}", lp_mint);
+            println!("LP Supply: {}", lp_supply);
+            // Create PoolState struct with extracted data
+            let pool_state = PoolState {
+                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                pool_creator: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                token_0_vault,                observation_key: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8+32*9..8+32*10]).unwrap()),
+
+                token_1_vault,
+                lp_mint,
+                lp_supply,
+                token_0_mint,
+                token_1_mint,
+                // We don't have access to other fields in the current context,
+                // so we'll leave them as default or uninitialized
+                ..Default::default()
+            };
+            let recipient_token_0_account = spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &pool_state.token_0_mint);
+            let recipient_token_1_account = spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &pool_state.token_1_mint);
+            let collect_fund_fee_instr = collect_fund_fee_instr(
+                &pool_config,
+                pool_id,
+                pool_state.amm_config,
+                pool_state.token_0_vault,
+                pool_state.token_1_vault,
+                pool_state.token_0_mint,
+                pool_state.token_1_mint,
+                recipient_token_0_account,
+                recipient_token_1_account,
+                amount_0_requested,
+                amount_1_requested,
+            )?;
+
+            let signers = vec![&payer];
+            let recent_hash = rpc_client.get_latest_blockhash()?;
+            let txn = Transaction::new_signed_with_payer(
+                &collect_fund_fee_instr,
+                Some(&payer.pubkey()),
+                &signers,
+                recent_hash,
+            );
+            let signature = send_txn(&rpc_client, &txn, true)?;
+            println!("Collect fund fee transaction signature: {}", signature);
+        },
         RaydiumCpCommands::InitializeAmmConfig {
             index,
             token_0_creator_rate,
@@ -253,9 +311,10 @@ fn main() -> Result<()> {
             println!("LP Supply: {}", lp_supply);
             // Create PoolState struct with extracted data
             let pool_state = PoolState {
-                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[40..72]).unwrap()),
+                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
                 pool_creator: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
-                token_0_vault,
+                token_0_vault,                observation_key: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8+32*9..8+32*10]).unwrap()),
+
                 token_1_vault,
                 lp_mint,
                 lp_supply,
@@ -393,10 +452,11 @@ fn main() -> Result<()> {
             println!("LP Supply: {}", lp_supply);
             // Create PoolState struct with extracted data
             let pool_state = PoolState {
-                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[40..72]).unwrap()),
+                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
                 pool_creator: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
                 token_0_vault,
-                token_1_vault,
+                token_1_vault,                observation_key: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8+32*9..8+32*10]).unwrap()),
+
                 lp_mint,
                 lp_supply,
                 token_0_mint,
@@ -516,7 +576,34 @@ fn main() -> Result<()> {
             user_input_token,
             user_input_amount,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
+            let pool_account = program.rpc().get_account(&pool_id)?;
+            let discriminator = &pool_account.data[0..8];
+            let token_0_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap());
+            let token_1_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[104..136]).unwrap());
+            let lp_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[136..168]).unwrap());
+            let token_0_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[168..200]).unwrap());
+            let token_1_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[200..232]).unwrap());
+            
+            // Extract lp_supply from the pool account data
+            let lp_supply = u64::from_le_bytes(*<&[u8; 8]>::try_from(&pool_account.data[272..280]).unwrap());
+            
+            println!("LP Mint: {}", lp_mint);
+            println!("LP Supply: {}", lp_supply);
+            // Create PoolState struct with extracted data
+            let pool_state = PoolState {
+                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                pool_creator: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                token_0_vault,
+                token_1_vault,                observation_key: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8+32*9..8+32*10]).unwrap()),
+
+                lp_mint,
+                lp_supply,
+                token_0_mint,
+                token_1_mint,
+                // We don't have access to other fields in the current context,
+                // so we'll leave them as default or uninitialized
+                ..Default::default()
+            };
             // load account
             let load_pubkeys = vec![
                 pool_state.amm_config,
@@ -580,8 +667,8 @@ fn main() -> Result<()> {
                     pool_state.token_1_vault,
                     pool_state.token_0_mint,
                     pool_state.token_1_mint,
-                    pool_state.token_0_program,
-                    pool_state.token_1_program,
+                    spl_token::id(), //todo fix
+                    spl_token::id(), //todo fix
                     get_transfer_fee(&token_0_mint_info, epoch, user_input_amount),
                 )
             } else {
@@ -598,8 +685,8 @@ fn main() -> Result<()> {
                     pool_state.token_0_vault,
                     pool_state.token_1_mint,
                     pool_state.token_0_mint,
-                    pool_state.token_1_program,
-                    pool_state.token_0_program,
+                    spl_token::id(), //todo fix
+                    spl_token::id(), //todo fix
                     get_transfer_fee(&token_1_mint_info, epoch, user_input_amount),
                 )
             };
@@ -671,8 +758,35 @@ fn main() -> Result<()> {
             user_input_token,
             amount_out_less_fee,
         } => {
-            let pool_state: raydium_cp_swap::states::PoolState = program.account(pool_id)?;
-            // load account
+            let pool_account = program.rpc().get_account(&pool_id)?;
+            let discriminator = &pool_account.data[0..8];
+            let token_0_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap());
+            let token_1_vault = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[104..136]).unwrap());
+            let lp_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[136..168]).unwrap());
+            let token_0_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[168..200]).unwrap());
+            let token_1_mint = Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[200..232]).unwrap());
+            
+            // Extract lp_supply from the pool account data
+            let lp_supply = u64::from_le_bytes(*<&[u8; 8]>::try_from(&pool_account.data[272..280]).unwrap());
+            
+            println!("LP Mint: {}", lp_mint);
+            println!("LP Supply: {}", lp_supply);
+            // Create PoolState struct with extracted data
+            let pool_state = PoolState {
+                amm_config: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                pool_creator: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8..40]).unwrap()),
+                token_0_vault,
+                observation_key: Pubkey::new_from_array(*<&[u8; 32]>::try_from(&pool_account.data[8+32*9..8+32*10]).unwrap()),
+                token_1_vault,
+                lp_mint,
+                lp_supply,
+                token_0_mint,
+                token_1_mint,
+                // We don't have access to other fields in the current context,
+                // so we'll leave them as default or uninitialized
+                ..Default::default()
+            };
+                        // load account
             let load_pubkeys = vec![
                 pool_state.amm_config,
                 pool_state.token_0_vault,
@@ -735,8 +849,8 @@ fn main() -> Result<()> {
                     pool_state.token_1_vault,
                     pool_state.token_0_mint,
                     pool_state.token_1_mint,
-                    pool_state.token_0_program,
-                    pool_state.token_1_program,
+                    spl_token::id(), //todo fix
+                    spl_token::id(), //todo fix
                     get_transfer_inverse_fee(&token_1_mint_info, epoch, amount_out_less_fee),
                 )
             } else {
@@ -753,8 +867,8 @@ fn main() -> Result<()> {
                     pool_state.token_0_vault,
                     pool_state.token_1_mint,
                     pool_state.token_0_mint,
-                    pool_state.token_1_program,
-                    pool_state.token_0_program,
+                    spl_token::id(), //todo fix
+                    spl_token::id(), //todo fix
                     get_transfer_inverse_fee(&token_0_mint_info, epoch, amount_out_less_fee),
                 )
             };
@@ -824,16 +938,6 @@ fn main() -> Result<()> {
             let signature = send_txn(&rpc_client, &txn, true)?;
             println!("{}", signature);
         }
-        RaydiumCpCommands::DecodeInstruction { instr_hex_data } => {
-            handle_program_instruction(&instr_hex_data, InstructionDecodeType::BaseHex)?;
-        }
-        RaydiumCpCommands::DecodeEvent { log_event } => {
-            handle_program_log(
-                &pool_config.raydium_cp_program.to_string(),
-                &log_event,
-                false,
-            )?;
-        }
         RaydiumCpCommands::DecodeTxLog { tx_id } => {
             let signature = Signature::from_str(&tx_id)?;
             let tx = rpc_client.get_transaction_with_config(
@@ -854,13 +958,8 @@ fn main() -> Result<()> {
             // get encoded_transaction
             let encoded_transaction = transaction.transaction;
             // decode instruction data
-            parse_program_instruction(
-                &pool_config.raydium_cp_program.to_string(),
-                encoded_transaction,
-                meta.clone(),
-            )?;
+            
             // decode logs
-            parse_program_event(&pool_config.raydium_cp_program.to_string(), meta.clone())?;
         }
     }
     Ok(())

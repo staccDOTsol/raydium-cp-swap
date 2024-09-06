@@ -140,13 +140,27 @@ pub mod raydium_cp_swap {
         init_amount_0: u64,
         init_amount_1: u64,
         open_time: u64,
+    ) -> Result<()> {
+        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
+    }
+    /// Initialize metadata for the LP token
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context of accounts
+    /// * `name` - The name of the LP token
+    /// * `symbol` - The symbol of the LP token
+    /// * `uri` - The URI for the LP token metadata
+    ///
+    pub fn initialize_metadata(
+        ctx: Context<InitializeMetadata>,
+        name: String,
         symbol: String,
         uri: String,
-        name: String,
-        bump: u8
     ) -> Result<()> {
-        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time, symbol, uri, name, bump)
+        instructions::initialize_metadata(ctx, name, symbol, uri)
     }
+
 
     /// Creates a pool for the given token pair and the initial price
     ///

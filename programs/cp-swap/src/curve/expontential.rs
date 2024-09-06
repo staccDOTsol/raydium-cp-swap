@@ -85,8 +85,6 @@ impl AMM {
 
         self.virtual_token_reserves = self.virtual_token_reserves.checked_sub(final_token_amount)?;
         self.real_token_reserves = self.real_token_reserves.checked_sub(final_token_amount)?;
-        self.virtual_sol_reserves = self.virtual_sol_reserves.checked_add(sol_amount)?;
-        self.real_sol_reserves = self.real_sol_reserves.checked_add(sol_amount)?;
 
         Some(BuyResult {
             token_amount: final_token_amount as u64,
@@ -99,8 +97,6 @@ impl AMM {
 
         self.virtual_token_reserves = self.virtual_token_reserves.checked_add(token_amount)?;
         self.real_token_reserves = self.real_token_reserves.checked_add(token_amount)?;
-        self.virtual_sol_reserves = self.virtual_sol_reserves.checked_sub(sol_amount)?;
-        self.real_sol_reserves = self.real_sol_reserves.checked_sub(sol_amount)?;
 
         Some(SellResult {
             token_amount: token_amount as u64,

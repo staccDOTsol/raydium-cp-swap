@@ -16,6 +16,55 @@ use raydium_cp_swap::{
 use std::rc::Rc;
 
 use super::super::{read_keypair_file, ClientConfig};
+pub fn collect_fund_fee_instr(
+    config: &ClientConfig,
+    pool_id: Pubkey,
+    amm_config: Pubkey,
+    token_0_vault: Pubkey,
+    token_1_vault: Pubkey,
+    token_0_mint: Pubkey,
+    token_1_mint: Pubkey,
+    recipient_token_0_account: Pubkey,
+    recipient_token_1_account: Pubkey,
+    amount_0_requested: u64,
+    amount_1_requested: u64,
+) -> Result<Vec<Instruction>> {
+    let payer = read_keypair_file(&config.payer_path)?;
+    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+    // Client.
+    let client = Client::new(url, Rc::new(payer));
+    let program = client.program(config.raydium_cp_program)?;
+
+    let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
+
+    let mut instructions = program
+        .request()
+        .accounts(raydium_cp_accounts::CollectFundFee {
+            owner: program.payer(),
+            authority,
+            pool_state: pool_id,
+            amm_config,
+            token_0_vault,
+            token_1_vault,
+            vault_0_mint: token_0_mint,
+            vault_1_mint: token_1_mint,
+            recipient_token_0_account,
+            recipient_token_1_account,
+            token_program: spl_token::id(),
+            token_program_2022: spl_token_2022::id(),
+        })
+        .args(raydium_cp_instructions::CollectFundFee {
+            amount_0_requested,
+            amount_1_requested,
+        })
+        .instructions()?;
+
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
+    instructions.insert(0, compute_budget_ix);
+    Ok(instructions)
+}
 pub fn initialize_amm_config_instr(
     config: &ClientConfig,
     amm_config_index: u64,
@@ -149,32 +198,49 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
-        token_metadata_program: mpl_token_metadata::ID,
-        metadata: Pubkey::find_program_address(
-            &[
-                b"metadata",
-                mpl_token_metadata::ID.as_ref(),
-                lp_mint_key.as_ref(),
-            ],
-            &mpl_token_metadata::ID,
-        )
-        .0,
+        
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
             init_amount_1,
             open_time,
-            uri: uri.to_string(),
-            symbol: symbol.to_string(),
-            name: name.to_string(),
-            bump: 0,
         })
         .instructions()?;
     // Extend with compute budget instruction
     let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
     instructions.insert(0, compute_budget_ix);
-    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(333333);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
     instructions.insert(0, compute_budget_ix);
+    // Initialize metadata for the LP token
+    let metadata_instruction = program
+        .request()
+        .accounts(raydium_cp_accounts::InitializeMetadata {
+            creator: program.payer(),
+            authority,
+            pool_state: pool_account_key,
+            observation_state: observation_key,
+            lp_mint: lp_mint_key,
+            token_metadata_program: mpl_token_metadata::ID,
+            metadata: Pubkey::find_program_address(
+                &[
+                    b"metadata",
+                    mpl_token_metadata::ID.as_ref(),
+                    lp_mint_key.as_ref(),
+                ],
+                &mpl_token_metadata::ID,
+            ).0,
+            system_program: system_program::id(),
+            rent: sysvar::rent::id(),
+            amm_config: amm_config_key,
+        })
+        .args(raydium_cp_instructions::InitializeMetadata {
+            name: name.clone(),
+            symbol: symbol.clone(),
+            uri: uri.clone(),
+        })
+        .instructions()?;
+    
+    instructions.extend(metadata_instruction);
     Ok(instructions)
 }
 
@@ -201,7 +267,7 @@ pub fn deposit_instr(
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
 
-    let instructions = program
+    let mut instructions = program
         .request()
         .accounts(raydium_cp_accounts::Deposit {
             owner: program.payer(),
@@ -224,6 +290,11 @@ pub fn deposit_instr(
             maximum_token_1_amount:u64::MAX,
         })
         .instructions()?;
+
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
+    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
 
@@ -250,7 +321,7 @@ pub fn withdraw_instr(
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
 
-    let instructions = program
+    let mut instructions = program
         .request()
         .accounts(raydium_cp_accounts::Withdraw {
             owner: program.payer(),
@@ -274,6 +345,11 @@ pub fn withdraw_instr(
             minimum_token_1_amount,
         })
         .instructions()?;
+
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
+    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
 
@@ -301,7 +377,7 @@ pub fn swap_base_input_instr(
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
 
-    let instructions = program
+    let mut instructions = program
         .request()
         .accounts(raydium_cp_accounts::Swap {
             payer: program.payer(),
@@ -323,6 +399,11 @@ pub fn swap_base_input_instr(
             minimum_amount_out,
         })
         .instructions()?;
+
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
+    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
 
@@ -350,7 +431,7 @@ pub fn swap_base_output_instr(
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
 
-    let instructions = program
+    let mut instructions = program
         .request()
         .accounts(raydium_cp_accounts::Swap {
             payer: program.payer(),
@@ -372,5 +453,10 @@ pub fn swap_base_output_instr(
             amount_out,
         })
         .instructions()?;
+
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
+    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
