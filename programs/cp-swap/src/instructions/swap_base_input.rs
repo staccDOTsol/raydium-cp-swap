@@ -194,17 +194,6 @@ let protocol_fee = (ctx.accounts.amm_config.token_0_creator_rate
         }
     };
 
-    emit!(SwapEvent {
-        pool_id,
-        input_vault_before: total_input_token_amount,
-        output_vault_before: total_output_token_amount,
-        input_amount: u64::try_from(result.source_amount_swapped).unwrap(),
-        output_amount: u64::try_from(result.destination_amount_swapped).unwrap(),
-        input_transfer_fee,
-        output_transfer_fee,
-        base_input: true
-    });
-
     transfer_from_user_to_pool_vault(
         ctx.accounts.payer.to_account_info(),
         ctx.accounts.input_token_account.to_account_info(),

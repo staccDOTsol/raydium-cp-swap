@@ -5,7 +5,6 @@ use std::ops::{BitAnd, BitOr, BitXor};
 use crate::curve::AMM;
 /// Seed to derive account address and signature
 pub const POOL_SEED: &str = "pool";
-pub const POOL_LP_MINT_SEED: &str = "pool_lp_mint";
 pub const POOL_VAULT_SEED: &str = "pool_vault";
 
 pub const Q32: u128 = (u32::MAX as u128) + 1; // 2^32
@@ -23,8 +22,9 @@ pub enum PoolStatusBitFlag {
 }
 
 #[account(zero_copy(unsafe))]
-#[repr(packed)]
 #[derive(Default, Debug)]
+
+#[repr(packed)]
 pub struct PoolState {
     /// Which config the pool belongs
     pub amm_config: Pubkey,
@@ -84,7 +84,7 @@ pub struct PoolState {
 }
 
 impl PoolState {
-    pub const LEN: usize = 8 + 10 * 32 + 1 * 5 + 8 * 7 + 8 * 31 + std::mem::size_of::<Option<AMM>>() + 8;
+    pub const LEN: usize = 733+8;
 
     pub fn initialize(
         &mut self,

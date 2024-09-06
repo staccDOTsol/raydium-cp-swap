@@ -94,7 +94,7 @@ impl CurveCalculator {
         token_0_lp_rate: u64,
         token_1_lp_rate: u64
     ) -> Option<SwapResult> {
-        let source_amount_less_fees = source_amount.checked_sub(token_0_creator_rate as u128+token_0_lp_rate as u128)?;
+        let source_amount_less_fees = source_amount.checked_sub(token_0_creator_rate as u128)?;
 
         let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
             source_amount_less_fees,

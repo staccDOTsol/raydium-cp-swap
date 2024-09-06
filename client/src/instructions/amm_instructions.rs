@@ -1,17 +1,58 @@
 use anchor_client::{Client, Cluster};
+use anchor_lang::Key;
 use anyhow::Result;
+use raydium_cp_swap::accounts::CreateAmmConfig;
+use solana_sdk::compute_budget::ComputeBudgetInstruction;
+use solana_sdk::signature::Keypair;
+use solana_sdk::signer::Signer;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 
 use raydium_cp_swap::accounts as raydium_cp_accounts;
 use raydium_cp_swap::instruction as raydium_cp_instructions;
 use raydium_cp_swap::{
-    states::{AMM_CONFIG_SEED, OBSERVATION_SEED, POOL_LP_MINT_SEED, POOL_SEED, POOL_VAULT_SEED},
+    states::{AMM_CONFIG_SEED, OBSERVATION_SEED, POOL_SEED, POOL_VAULT_SEED},
     AUTH_SEED,
 };
 use std::rc::Rc;
 
 use super::super::{read_keypair_file, ClientConfig};
+pub fn initialize_amm_config_instr(
+    config: &ClientConfig,
+    amm_config_index: u64,
+    token_0_creator_rate: u64,
+    token_1_lp_rate: u64,
+    token_0_lp_rate: u64,
+    token_1_creator_rate: u64,
+) -> Result<Vec<Instruction>> {
+    let payer = read_keypair_file(&config.payer_path)?;
+    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+    let client = Client::new(url, Rc::new(payer));
+    let program = client.program(config.raydium_cp_program)?;
 
+    let (amm_config_key, _bump) = Pubkey::find_program_address(
+        &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
+        &program.id(),
+    );
+
+    let accounts = CreateAmmConfig {
+        amm_config: amm_config_key,
+        owner: program.payer(),
+        system_program: system_program::ID,
+    };
+
+    let ix = program.request()
+        .accounts(accounts)
+        .args(raydium_cp_instructions::CreateAmmConfig {
+            index: amm_config_index,
+            token_0_creator_rate,
+            token_1_lp_rate,
+            token_0_lp_rate,
+            token_1_creator_rate
+        })
+        .instructions()?;
+
+    Ok(ix)
+}
 pub fn initialize_pool_instr(
     config: &ClientConfig,
     token_0_mint: Pubkey,
@@ -24,6 +65,10 @@ pub fn initialize_pool_instr(
     init_amount_0: u64,
     init_amount_1: u64,
     open_time: u64,
+    symbol: String,
+    uri: String,
+    name: String,
+    lp_mint: Pubkey
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
@@ -31,7 +76,7 @@ pub fn initialize_pool_instr(
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_cp_program)?;
 
-    let amm_config_index = 0u16;
+    let amm_config_index = 0u64;
     let (amm_config_key, __bump) = Pubkey::find_program_address(
         &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
         &program.id(),
@@ -46,6 +91,7 @@ pub fn initialize_pool_instr(
         ],
         &program.id(),
     );
+    println!("pool_account_key: {}", pool_account_key);
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
     let (token_0_vault, __bump) = Pubkey::find_program_address(
         &[
@@ -63,13 +109,6 @@ pub fn initialize_pool_instr(
         ],
         &program.id(),
     );
-    let (lp_mint_key, __bump) = Pubkey::find_program_address(
-        &[
-            POOL_LP_MINT_SEED.as_bytes(),
-            pool_account_key.to_bytes().as_ref(),
-        ],
-        &program.id(),
-    );
     let (observation_key, __bump) = Pubkey::find_program_address(
         &[
             OBSERVATION_SEED.as_bytes(),
@@ -78,7 +117,14 @@ pub fn initialize_pool_instr(
         &program.id(),
     );
 
-    let instructions = program
+    let (lp_mint_key, bump) = Pubkey::find_program_address(
+        &[
+            "pool_lp_mint".as_bytes(),
+            pool_account_key.to_bytes().as_ref(),
+        ],
+        &program.id(),
+    );
+    let mut instructions = program
         .request()
         .accounts(raydium_cp_accounts::Initialize {
             creator: program.payer(),
@@ -96,7 +142,6 @@ pub fn initialize_pool_instr(
             ),
             token_0_vault,
             token_1_vault,
-            create_pool_fee,
             observation_state: observation_key,
             token_program: spl_token::id(),
             token_0_program,
@@ -104,13 +149,32 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
+        token_metadata_program: mpl_token_metadata::ID,
+        metadata: Pubkey::find_program_address(
+            &[
+                b"metadata",
+                mpl_token_metadata::ID.as_ref(),
+                lp_mint_key.as_ref(),
+            ],
+            &mpl_token_metadata::ID,
+        )
+        .0,
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
             init_amount_1,
             open_time,
+            uri: uri.to_string(),
+            symbol: symbol.to_string(),
+            name: name.to_string(),
+            bump: 0,
         })
         .instructions()?;
+    // Extend with compute budget instruction
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
+    instructions.insert(0, compute_budget_ix);
+    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(333333);
+    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
 
@@ -156,8 +220,8 @@ pub fn deposit_instr(
         })
         .args(raydium_cp_instructions::Deposit {
             lp_token_amount,
-            maximum_token_0_amount,
-            maximum_token_1_amount,
+            maximum_token_0_amount:u64::MAX,
+            maximum_token_1_amount:u64::MAX,
         })
         .instructions()?;
     Ok(instructions)
@@ -201,8 +265,8 @@ pub fn withdraw_instr(
             token_program_2022: spl_token_2022::id(),
             vault_0_mint: token_0_mint,
             vault_1_mint: token_1_mint,
+            memo_program: spl_memo::ID,
             lp_mint: token_lp_mint,
-            memo_program: spl_memo::id(),
         })
         .args(raydium_cp_instructions::Withdraw {
             lp_token_amount,

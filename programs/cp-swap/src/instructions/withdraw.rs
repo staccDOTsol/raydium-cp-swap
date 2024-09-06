@@ -1,17 +1,16 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
-use crate::curve::AMM;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
-use anchor_spl::token_2022;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
+use spl_math::uint::U256;
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    /// Pays to burn the position
+    /// Pays to mint the position
     pub owner: Signer<'info>,
 
     /// CHECK: pool vault and lp mint authority
@@ -23,11 +22,15 @@ pub struct Withdraw<'info> {
     )]
     pub authority: UncheckedAccount<'info>,
 
+    /// Pool state account
     #[account(mut)]
     pub pool_state: AccountLoader<'info, PoolState>,
 
     /// Owner lp token account
-    #[account(mut,  token::authority = owner)]
+    #[account(
+        mut, 
+        token::authority = owner
+    )]
     pub owner_lp_token: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The owner's token account for receive token_0
@@ -61,7 +64,7 @@ pub struct Withdraw<'info> {
     pub token_1_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// token Program
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
 
     /// Token program 2022
     pub token_program_2022: Program<'info, Token2022>,
@@ -78,12 +81,19 @@ pub struct Withdraw<'info> {
     )]
     pub vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// Lp token mint
+    /// Pool lp token mint
     #[account(
         mut,
         address = pool_state.load()?.lp_mint @ ErrorCode::IncorrectLpMint)
     ]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
+
+    /// memo program
+    /// CHECK:
+    #[account(
+        address = spl_memo::id()
+    )]
+    pub memo_program: UncheckedAccount<'info>,
 }
 
 pub fn withdraw(
@@ -92,45 +102,72 @@ pub fn withdraw(
     minimum_token_0_amount: u64,
     minimum_token_1_amount: u64,
 ) -> Result<()> {
+    require_gt!(ctx.accounts.lp_mint.supply, 0);
     let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
-    let pool_auth_bump = pool_state.auth_bump;
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw) {
         return err!(ErrorCode::NotApproved);
     }
+    let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
+        ctx.accounts.token_0_vault.amount,
+        ctx.accounts.token_1_vault.amount,
+    );
+    let results = CurveCalculator::lp_tokens_to_trading_tokens(
+        u128::from(lp_token_amount),
+        u128::from(pool_state.lp_supply),
+        u128::from(total_token_0_amount),
+        u128::from(total_token_1_amount),
+        RoundDirection::Floor,
+    )
+    .ok_or(ErrorCode::ZeroTradingTokens)?;
 
-    // Calculate the withdrawal amounts
-    let (withdraw_token_0, withdraw_token_1) = {
-        let total_supply = pool_state.amm.virtual_token_0_reserves.checked_add(pool_state.amm.virtual_token_1_reserves)
-            .ok_or(ErrorCode::IncorrectLpMint)?;
-        let token_0_amount = (lp_token_amount as u128)
-            .checked_mul(pool_state.amm.virtual_token_0_reserves)
-            .and_then(|v| v.checked_div(total_supply))
-            .ok_or(ErrorCode::IncorrectLpMint)?;
-        let token_1_amount = (lp_token_amount as u128)
-            .checked_mul(pool_state.amm.virtual_token_1_reserves)
-            .and_then(|v| v.checked_div(total_supply))
-            .ok_or(ErrorCode::IncorrectLpMint)?;
-        (token_0_amount, token_1_amount)
+    let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
+    let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
+    let (receive_token_0_amount, token_0_transfer_fee) = {
+        let transfer_fee = get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
+        (
+            token_0_amount.checked_sub(transfer_fee).unwrap(),
+            transfer_fee,
+        )
     };
 
-    // Ensure the calculated withdrawal amounts meet the minimum requirements
-    require!(
-        withdraw_token_0 >= minimum_token_0_amount as u128 && withdraw_token_1 >= minimum_token_1_amount as u128,
-        ErrorCode::ExceededSlippage
-    );
+    let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
+    let token_1_amount = std::cmp::min(total_token_1_amount, token_1_amount);
+    let (receive_token_1_amount, token_1_transfer_fee) = {
+        let transfer_fee = get_transfer_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
+        (
+            token_1_amount.checked_sub(transfer_fee).unwrap(),
+            transfer_fee,
+        )
+    };
 
-    // Burn LP tokens from user
+    #[cfg(feature = "enable-log")]
+    msg!(
+        "results.token_0_amount;{}, results.token_1_amount:{},receive_token_0_amount:{},token_0_transfer_fee:{},
+            receive_token_1_amount:{},token_1_transfer_fee:{}",
+        results.token_0_amount,
+        results.token_1_amount,
+        receive_token_0_amount,
+        token_0_transfer_fee,
+        receive_token_1_amount,
+        token_1_transfer_fee
+    );
+    if receive_token_0_amount < minimum_token_0_amount
+        || receive_token_1_amount < minimum_token_1_amount
+    {
+        return Err(ErrorCode::ExceededSlippage.into());
+    }
+    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.lp_mint.to_account_info(),
         ctx.accounts.owner_lp_token.to_account_info(),
-        lp_token_amount,
-        &[&[crate::AUTH_SEED.as_bytes(), &[pool_auth_bump]]],
+        lp_token_amount as u64,
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
 
-    // Transfer token_0 from pool to user
+    let mut amm = pool_state.amm;
     transfer_from_pool_vault_to_user(
         ctx.accounts.authority.to_account_info(),
         ctx.accounts.token_0_vault.to_account_info(),
@@ -141,12 +178,11 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        withdraw_token_0 as u64,
+        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_0_amount,
         ctx.accounts.vault_0_mint.decimals,
-        &[&[crate::AUTH_SEED.as_bytes(), &[pool_auth_bump]]],
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
 
-    // Transfer token_1 from pool to user
     transfer_from_pool_vault_to_user(
         ctx.accounts.authority.to_account_info(),
         ctx.accounts.token_1_vault.to_account_info(),
@@ -157,17 +193,13 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        withdraw_token_1 as u64,
+        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
-        &[&[crate::AUTH_SEED.as_bytes(), &[pool_auth_bump]]],
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-    let mut amm = pool_state.amm;
-    amm.apply_withdraw(withdraw_token_0, withdraw_token_1)?;
-    pool_state.amm = amm;
-    // Update pool state
-    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
-
     pool_state.recent_epoch = Clock::get()?.epoch;
+
+    pool_state.amm = amm;
 
     Ok(())
 }

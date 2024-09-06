@@ -22,14 +22,14 @@ solana_security_txt::security_txt! {
 #[cfg(feature = "devnet")]
 declare_id!("CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW");
 #[cfg(not(feature = "devnet"))]
-declare_id!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
+declare_id!("3D421tPJZJNJi4AuSR8t1ZLBQ7kYYfhxsKTRiSKLdNsb");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
     #[cfg(feature = "devnet")]
     declare_id!("adMCyoCgfkg7bQiJ9aBJ59H3BXLY3r5LNLfPpQfMzBe");
     #[cfg(not(feature = "devnet"))]
-    declare_id!("GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ");
+    declare_id!("99VXriv7RXJSypeJDBQtGRsak1n5o2NBzbtMXhHW2RNG");
 }
 
 pub mod create_pool_fee_reveiver {
@@ -37,7 +37,7 @@ pub mod create_pool_fee_reveiver {
     #[cfg(feature = "devnet")]
     declare_id!("G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2");
     #[cfg(not(feature = "devnet"))]
-    declare_id!("DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8");
+    declare_id!("Cja56QjuKWUDywtqoGrwfebiF3UjpmYT9KS4FbhXgDkw");
 }
 
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
@@ -58,22 +58,18 @@ pub mod raydium_cp_swap {
     pub fn create_amm_config(
         ctx: Context<CreateAmmConfig>,
         index: u64,
-        trade_fee_rate: u64,
-        protocol_fee_rate: u64,
-        fund_fee_rate: u64,
-        create_pool_fee: u64,
+        token_1_lp_rate: u64,
+        token_0_lp_rate: u64,
+        token_0_creator_rate: u64,
+        token_1_creator_rate: u64,
     ) -> Result<()> {
-        assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
-        assert!(protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
-        assert!(fund_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
-        assert!(fund_fee_rate + protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
         instructions::create_amm_config(
             ctx,
             index,
-            trade_fee_rate,
-            protocol_fee_rate,
-            fund_fee_rate,
-            create_pool_fee,
+            token_1_lp_rate,
+            token_0_lp_rate,
+            token_0_creator_rate,
+            token_1_creator_rate,
         )
     }
 
@@ -90,20 +86,13 @@ pub mod raydium_cp_swap {
     /// * `new_fund_owner`- The config's new fund owner, be set when `param` is 4
     /// * `param`- The vaule can be 0 | 1 | 2 | 3 | 4, otherwise will report a error
     ///
-    pub fn update_amm_config(ctx: Context<UpdateAmmConfig>, param: u8, value: u64) -> Result<()> {
-        instructions::update_amm_config(ctx, param, value)
-    }
 
     /// Update pool status for given vaule
     ///
     /// # Arguments
     ///
     /// * `ctx`- The context of accounts
-    /// * `status` - The vaule of status
-    ///
-    pub fn update_pool_status(ctx: Context<UpdatePoolStatus>, status: u8) -> Result<()> {
-        instructions::update_pool_status(ctx, status)
-    }
+    /// * `status` - The v
 
     /// Collect the protocol fee accrued to the pool
     ///
@@ -170,15 +159,15 @@ pub mod raydium_cp_swap {
     ///
     pub fn deposit(
         ctx: Context<Deposit>,
-        token_0_amount: u64,
-        token_1_amount: u64,
-        minimum_lp_token_amount: u64,
+        lp_token_amount: u64,
+        maximum_token_0_amount: u64,
+        maximum_token_1_amount: u64,
     ) -> Result<()> {
         instructions::deposit(
             ctx,
-            token_0_amount,
-            token_1_amount,
-            minimum_lp_token_amount,
+            lp_token_amount,
+            maximum_token_0_amount,
+            maximum_token_1_amount,
         )
     }
 

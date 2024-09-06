@@ -312,19 +312,19 @@ pub fn handle_program_instruction(
             #[derive(Debug)]
             pub struct CreateAmmConfig {
                 pub index: u64,
-                pub trade_fee_rate: u64,
-                pub protocol_fee_rate: u64,
-                pub fund_fee_rate: u64,
-                pub create_pool_fee: u64,
+                pub token_1_lp_rate: u64,
+                pub token_0_lp_rate: u64,
+                pub token_0_creator_rate: u64,
+                pub token_1_creator_rate: u64,
             }
             impl From<instruction::CreateAmmConfig> for CreateAmmConfig {
                 fn from(instr: instruction::CreateAmmConfig) -> CreateAmmConfig {
                     CreateAmmConfig {
                         index: instr.index,
-                        trade_fee_rate: instr.trade_fee_rate,
-                        protocol_fee_rate: instr.protocol_fee_rate,
-                        fund_fee_rate: instr.fund_fee_rate,
-                        create_pool_fee: instr.create_pool_fee,
+                        token_1_lp_rate: instr.token_1_lp_rate,
+                        token_0_lp_rate: instr.token_0_lp_rate,
+                        token_0_creator_rate: instr.token_0_creator_rate,
+                        token_1_creator_rate: instr.token_1_creator_rate,
                     }
                 }
             }
@@ -419,16 +419,16 @@ pub fn handle_program_instruction(
             let ix = decode_instruction::<instruction::Deposit>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct Deposit {
-                pub lp_token_amount: u64,
-                pub maximum_token_0_amount: u64,
-                pub maximum_token_1_amount: u64,
+                pub token_0_amount: u64,
+                pub token_1_amount: u64,
+                pub minimum_lp_token_amount: u64,
             }
             impl From<instruction::Deposit> for Deposit {
                 fn from(instr: instruction::Deposit) -> Deposit {
                     Deposit {
-                        lp_token_amount: instr.lp_token_amount,
-                        maximum_token_0_amount: instr.maximum_token_0_amount,
-                        maximum_token_1_amount: instr.maximum_token_1_amount,
+                        token_0_amount: instr.token_0_amount,
+                        token_1_amount: instr.token_1_amount,
+                        minimum_lp_token_amount: instr.minimum_lp_token_amount,
                     }
                 }
             }
