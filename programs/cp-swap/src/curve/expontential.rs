@@ -1,3 +1,4 @@
+
 use anchor_lang::prelude::*;
 use std::fmt;
 
@@ -13,6 +14,7 @@ pub struct SellResult {
     pub sol_amount: u64,
 }
 
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
 pub struct AMM {
     pub virtual_sol_reserves: u128,
@@ -21,7 +23,6 @@ pub struct AMM {
     pub real_token_reserves: u128,
     pub initial_virtual_token_reserves: u128,
 }
-
 impl Default for AMM {
     fn default() -> Self {
         AMM::new()
@@ -38,53 +39,31 @@ impl AMM {
             initial_virtual_token_reserves: 1_073_000_000_000_000,
         }
     }
-
-    pub fn get_buy_price(&mut self, tokens: u128) -> Option<u128> {
-        msg!("get_buy_price called with tokens: {}", tokens);
-
-        // Check if tokens exceed virtual_token_reserves and adjust if necessary
-        if tokens > self.virtual_token_reserves {
-            self.virtual_token_reserves = (self.virtual_token_reserves as f64 * 1.1) as u128;
-            msg!("Adjusted virtual_token_reserves to: {}", self.virtual_token_reserves);
-        }
-        if tokens == 0 {
-            msg!("Tokens is 0, returning None");
+    pub fn get_buy_price(&self, tokens: u128) -> Option<u128> {
+        if tokens == 0 || tokens > self.virtual_token_reserves {
             return None;
         }
 
         let product_of_reserves = self.virtual_sol_reserves.checked_mul(self.virtual_token_reserves)?;
-        msg!("Product of reserves: {}", product_of_reserves);
-
         let new_virtual_token_reserves = self.virtual_token_reserves.checked_sub(tokens)?;
-        msg!("New virtual token reserves: {}", new_virtual_token_reserves);
-
         let new_virtual_sol_reserves = product_of_reserves.checked_div(new_virtual_token_reserves)?.checked_add(1)?;
-        msg!("New virtual SOL reserves: {}", new_virtual_sol_reserves);
         let amount_needed = new_virtual_sol_reserves.checked_sub(self.virtual_sol_reserves)?;
 
-        msg!("Amount needed: {}", amount_needed);
-        // Update virtual and real reserves
-        self.virtual_sol_reserves = self.virtual_sol_reserves.checked_add(amount_needed)?;
-        self.real_sol_reserves = self.real_sol_reserves.checked_add(amount_needed)?;
-        let amount_needed = amount_needed ;
-        msg!("Amount needed: {}", amount_needed);
-
-
-        msg!("Updated virtual_sol_reserves: {}", self.virtual_sol_reserves);
-        msg!("Updated real_sol_reserves: {}", self.real_sol_reserves);
-        msg!("Updated virtual_token_reserves: {}", self.virtual_token_reserves);
-        msg!("Updated real_token_reserves: {}", self.real_token_reserves);
-
-        msg!("Returning amount_needed: {}", amount_needed);
         Some(amount_needed)
     }
 
     pub fn apply_buy(&mut self, token_amount: u128) -> Option<BuyResult> {
-        let final_token_amount = token_amount.min(self.real_token_reserves);
+        let final_token_amount = if token_amount > self.real_token_reserves {
+            self.real_token_reserves
+        } else {
+            token_amount
+    };
+
         let sol_amount = self.get_buy_price(final_token_amount)?;
 
         self.virtual_token_reserves = self.virtual_token_reserves.checked_sub(final_token_amount)?;
         self.real_token_reserves = self.real_token_reserves.checked_sub(final_token_amount)?;
+
         self.virtual_sol_reserves = self.virtual_sol_reserves.checked_add(sol_amount)?;
         self.real_sol_reserves = self.real_sol_reserves.checked_add(sol_amount)?;
 
@@ -95,10 +74,17 @@ impl AMM {
     }
 
     pub fn apply_sell(&mut self, token_amount: u128) -> Option<SellResult> {
-        let sol_amount = self.get_sell_price(token_amount)?;
+        let final_token_amount = if token_amount > self.real_token_reserves {
+            self.real_token_reserves
+        } else {
+            token_amount
+    };
 
-        self.virtual_token_reserves = self.virtual_token_reserves.checked_add(token_amount)?;
-        self.real_token_reserves = self.real_token_reserves.checked_add(token_amount)?;
+        let sol_amount = self.get_sell_price(final_token_amount)?;
+
+        self.virtual_token_reserves = self.virtual_token_reserves.checked_add(final_token_amount)?;
+        self.real_token_reserves = self.real_token_reserves.checked_add(final_token_amount)?;
+
         self.virtual_sol_reserves = self.virtual_sol_reserves.checked_sub(sol_amount)?;
         self.real_sol_reserves = self.real_sol_reserves.checked_sub(sol_amount)?;
 
@@ -108,31 +94,21 @@ impl AMM {
         })
     }
 
-    pub fn get_sell_price(&mut self, tokens: u128) -> Option<u128> {
-         if tokens > self.virtual_token_reserves {
-            self.virtual_token_reserves = (self.virtual_token_reserves as f64 * 1.1) as u128;
-        }
-        if tokens == 0 || tokens > self.virtual_token_reserves {
+    pub fn get_sell_price(&self, tokens: u128) -> Option<u128> {
+        if tokens <= 0 || tokens > self.virtual_token_reserves {
             return None;
         }
 
         let scaling_factor = self.initial_virtual_token_reserves;
+
         let scaled_tokens = tokens.checked_mul(scaling_factor)?;
         let token_sell_proportion = scaled_tokens.checked_div(self.virtual_token_reserves)?;
         let sol_received = (self.virtual_sol_reserves.checked_mul(token_sell_proportion)?).checked_div(scaling_factor)?;
-        // Calculate the amount of SOL to be received
-        let sol_to_receive = (self.virtual_sol_reserves.checked_mul(token_sell_proportion)?).checked_div(scaling_factor)?;
-        
-        // Ensure the amount to receive doesn't exceed the real SOL reserves
-        let sol_to_receive = sol_to_receive.min(self.real_sol_reserves) ;
-
-        // Update virtual and real reserves
-        self.virtual_sol_reserves = self.virtual_sol_reserves.checked_sub(sol_to_receive)?;
-        self.real_sol_reserves = self.real_sol_reserves.checked_sub(sol_to_receive)?;
 
         Some(sol_received.min(self.real_sol_reserves))
     }
 }
+
 
 impl fmt::Display for AMM {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -146,82 +122,109 @@ impl fmt::Display for AMM {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::amm::AMM;
 
     #[test]
     fn test_buy_and_sell_too_much() {
-        let mut amm = AMM::new();
 
+        let virtual_sol_reserves = 600;
+        let virtual_token_reserves = 600;
+        let real_sol_reserves = 0;
+        let real_token_reserves = 500;
+        let initial_virtual_token_reserves = 1000;
+
+        let mut amm = AMM::new(virtual_sol_reserves, virtual_token_reserves, real_sol_reserves, real_token_reserves, initial_virtual_token_reserves);
+
+        //println!("{} \n", 1/0);
         // Attempt to buy more tokens than available in reserves
-        let buy_result = amm.apply_buy(25806975).unwrap();
-        assert_eq!(buy_result.token_amount, 25806975);
-        assert_eq!(buy_result.sol_amount, 54);
-        assert_eq!(amm.real_token_reserves, 793074193024659);
-        assert_eq!(amm.virtual_token_reserves, 1072974193024659000);
-        assert_eq!(amm.real_sol_reserves, 1000054);
-        assert_eq!(amm.virtual_sol_reserves, 30000000054);
+        let buy_result = amm.apply_buy(2000).unwrap();
+        println!("{:?} \n", buy_result);
+        assert_eq!(buy_result.token_amount, 500); // Should buy up to available real_token_reserves
+        assert_eq!(buy_result.sol_amount, 3001);
+        assert_eq!(amm.real_token_reserves, real_token_reserves - buy_result.token_amount as u128);
+        assert_eq!(amm.virtual_token_reserves, virtual_token_reserves - buy_result.token_amount as u128); 
+        assert_eq!(amm.real_sol_reserves, real_sol_reserves + buy_result.sol_amount as u128);   
+        assert_eq!(amm.virtual_sol_reserves, virtual_sol_reserves + buy_result.sol_amount as u128); 
+        println!("{} \n", amm);
+        println!("{:?} \n", buy_result);
 
         // Attempt to sell more tokens than available in reserves
-        let sell_result = amm.apply_sell(793074193024659).unwrap();
-        assert_eq!(sell_result.token_amount, 793074193024659);
-        assert_eq!(sell_result.sol_amount, 1000054);
-        assert_eq!(amm.real_sol_reserves, 0);
-        assert_eq!(amm.virtual_sol_reserves, 29000000000);
-        assert_eq!(amm.real_token_reserves, 1586148386049318);
-        assert_eq!(amm.virtual_token_reserves, 1866048386049318000);
+        let sell_result = amm.apply_sell(2000).unwrap();
+        assert_eq!(sell_result.token_amount, 2000); // Should sell requested amount
+        assert_eq!(sell_result.sol_amount, 3001);    
+        assert_eq!(amm.real_sol_reserves, 0); 
+        assert_eq!(amm.virtual_sol_reserves, 600);  
+        assert_eq!(amm.real_token_reserves, 2000);  
+        assert_eq!(amm.virtual_token_reserves, 2100); 
+        println!("{} \n", amm);
+        println!("{:?} \n", sell_result);
     }
 
     #[test]
     fn test_apply_sell() {
-        let mut amm = AMM::new();
-        let result = amm.apply_sell(25806975).unwrap();
+        let mut amm = AMM::new(1000, 1000, 500, 500, 1000);
+        let result = amm.apply_sell(100).unwrap();
 
-        assert_eq!(result.token_amount, 25806975);
-        assert_eq!(result.sol_amount, 53);
-        assert_eq!(amm.virtual_token_reserves, 1073025806975000);
-        assert_eq!(amm.real_token_reserves, 793125806975000);
-        assert_eq!(amm.virtual_sol_reserves, 29999999947);
-        assert_eq!(amm.real_sol_reserves, 999947);
+        assert_eq!(result.token_amount, 100);
+        assert_eq!(result.sol_amount, 90); 
+        assert_eq!(amm.virtual_token_reserves, 1100);
+        assert_eq!(amm.real_token_reserves, 600);
+        assert_eq!(amm.virtual_sol_reserves, 910); 
+        assert_eq!(amm.real_sol_reserves, 410);    
     }
 
     #[test]
     fn test_get_sell_price() {
-        let mut amm = AMM::new();
+        let amm = AMM::new(1000, 1000, 500, 500, 1000);
 
         // Edge case: zero tokens
         assert_eq!(amm.get_sell_price(0), None);
 
         // Normal case
-        assert_eq!(amm.get_sell_price(25806975), Some(53));
+        assert_eq!(amm.get_sell_price(100), Some(100)); 
 
         // Should not exceed real sol reserves
-        assert_eq!(amm.get_sell_price(amm.virtual_token_reserves), Some(amm.real_sol_reserves));
+        assert_eq!(amm.get_sell_price(5000), None); 
     }
 
     #[test]
     fn test_apply_buy() {
-        let mut amm = AMM::new();
-        let result = amm.apply_buy(25806975).unwrap();
+        let virtual_sol_reserves = 600;
+        let virtual_token_reserves = 600;
+        let real_sol_reserves = 500;
+        let real_token_reserves = 500;
+        let initial_virtual_token_reserves = 1000;
 
-        assert_eq!(result.token_amount, 25806975);
-        assert_eq!(result.sol_amount, 54);
-        assert_eq!(amm.virtual_token_reserves, 1072974193025000);
-        assert_eq!(amm.real_token_reserves, 793074193025000);
-        assert_eq!(amm.virtual_sol_reserves, 30000000054);
-        assert_eq!(amm.real_sol_reserves, 1000054);
+        let mut amm = AMM::new(
+            virtual_sol_reserves, 
+            virtual_token_reserves, 
+            real_sol_reserves, 
+            real_token_reserves, 
+            initial_virtual_token_reserves
+        );
+
+        let purchase_amount = 100;
+
+        let result = amm.apply_buy(100).unwrap();
+        
+        assert_eq!(result.token_amount, purchase_amount as u64);
+        assert_eq!(result.sol_amount, 121); 
+        assert_eq!(amm.virtual_token_reserves, virtual_token_reserves - purchase_amount);
+        assert_eq!(amm.real_token_reserves, real_token_reserves - purchase_amount);
+        assert_eq!(amm.virtual_sol_reserves, 721);
+        assert_eq!(amm.real_sol_reserves, 621);
     }
 
     #[test]
     fn test_get_buy_price() {
-        let mut amm = AMM::new();
-
-        // Edge case: zero SOL
+        let amm = AMM::new(1000, 1000, 500, 500, 1000);
+        
         assert_eq!(amm.get_buy_price(0), None);
-
+        
         // Normal case
-        assert_eq!(amm.get_buy_price(54), Some(25806975));
+        assert_eq!(amm.get_buy_price(100), Some(112)); 
 
-        // Should not exceed real token reserves
-        assert_eq!(amm.get_buy_price(amm.virtual_sol_reserves), Some(793099999999999));
+        // Edge case: very large token amount
+        assert_eq!(amm.get_buy_price(2000), None); 
     }
 }

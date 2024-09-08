@@ -1,8 +1,14 @@
 [package]
 name = "raydium-cp-swap"
-version = "0.1.0"
-description = "Created with Anchor"
+version = "1.0.138138"
+description = "Raydium Concentrated Liquidity Pool Swap Program"
 edition = "2021"
+license = "Apache-2.0"
+homepage = "https://raydium.io"
+repository = "https://github.com/raydium-io/raydium-cp-swap"
+documentation = "https://docs.raydium.io"
+keywords = ["solana", "raydium", "defi", "amm", "swap"]
+authors = ["Raydium Maintainers <dev@raydium.io>"]
 
 [lib]
 crate-type = ["cdylib", "lib"]
@@ -19,25 +25,24 @@ devnet = []
 client = []
 
 [dependencies]
-anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
+anchor-lang = { version = "0.30.1"}
 anchor-spl = { version = "0.30.1", features = ["metadata"] }
-spl-token = { version = "4.0.0", features = ["no-entrypoint"] }
+uint ="*"
+spl-token = { version = "3.0.0", features = ["no-entrypoint"] }
 spl-math = { version = "0.2", features = ["no-entrypoint"] }
-spl-memo = "4.0.0"
-uint = "0.9.1"
 solana-security-txt = "1.1.1"
 bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
-spl-token-2022 = "*"
+spl-token-2022 = { version = "0.9.0", features = ["no-entrypoint"]}
 [dev-dependencies]
 quickcheck = "0.9"
 proptest = "1.0"
 rand = "0.8.5"
 [profile.release]
-lto = true
-codegen-units = 1
-panic = "abort"
-opt-level = "z"
-strip = true
 overflow-checks = true
-
+lto = "fat"
+codegen-units = 1
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1

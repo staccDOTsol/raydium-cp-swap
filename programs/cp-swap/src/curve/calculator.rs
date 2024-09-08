@@ -1,6 +1,6 @@
 //! Swap calculations
 
-use crate::curve::{constant_product::ConstantProductCurve, fees::Fees};
+use crate::curve::{constant_product::ConstantProductCurve};
 use anchor_lang::prelude::*;
 use {crate::error::ErrorCode, std::fmt::Debug};
 

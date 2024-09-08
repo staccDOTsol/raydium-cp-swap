@@ -149,25 +149,12 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
-        token_metadata_program: mpl_token_metadata::ID,
-        metadata: Pubkey::find_program_address(
-            &[
-                b"metadata",
-                mpl_token_metadata::ID.as_ref(),
-                lp_mint_key.as_ref(),
-            ],
-            &mpl_token_metadata::ID,
-        )
-        .0,
+        
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
             init_amount_1,
             open_time,
-            uri: uri.to_string(),
-            symbol: symbol.to_string(),
-            name: name.to_string(),
-            bump: 0,
         })
         .instructions()?;
     // Extend with compute budget instruction
@@ -175,6 +162,34 @@ pub fn initialize_pool_instr(
     instructions.insert(0, compute_budget_ix);
     let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(333333);
     instructions.insert(0, compute_budget_ix);
+    // Initialize metadata for the LP token
+    let metadata_instruction = program
+        .request()
+        .accounts(raydium_cp_accounts::InitializeMetadata {
+            creator: program.payer(),
+            authority,
+            lp_mint: lp_mint_key,
+            token_metadata_program: mpl_token_metadata::ID,
+            metadata: Pubkey::find_program_address(
+                &[
+                    b"metadata",
+                    mpl_token_metadata::ID.as_ref(),
+                    lp_mint_key.as_ref(),
+                ],
+                &mpl_token_metadata::ID,
+            ).0,
+            system_program: system_program::id(),
+            rent: sysvar::rent::id(),
+            amm_config: amm_config_key,
+        })
+        .args(raydium_cp_instructions::InitializeMetadata {
+            name: name.clone(),
+            symbol: symbol.clone(),
+            uri: uri.clone(),
+        })
+        .instructions()?;
+    
+    instructions.extend(metadata_instruction);
     Ok(instructions)
 }
 

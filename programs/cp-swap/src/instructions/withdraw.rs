@@ -6,7 +6,6 @@ use crate::utils::token::*;
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use spl_math::uint::U256;
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
@@ -88,12 +87,6 @@ pub struct Withdraw<'info> {
     ]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    /// memo program
-    /// CHECK:
-    #[account(
-        address = spl_memo::id()
-    )]
-    pub memo_program: UncheckedAccount<'info>,
 }
 
 pub fn withdraw(
@@ -103,15 +96,23 @@ pub fn withdraw(
     minimum_token_1_amount: u64,
 ) -> Result<()> {
     require_gt!(ctx.accounts.lp_mint.supply, 0);
-    let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw) {
         return err!(ErrorCode::NotApproved);
     }
-    let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
-        ctx.accounts.token_0_vault.amount,
-        ctx.accounts.token_1_vault.amount,
-    );
+    
+    // Calculate total amounts including protocol fees
+    let total_token_0_amount = ctx.accounts.token_0_vault.amount
+        .checked_add(pool_state.protocol_fees_token_0)
+        .ok_or(ErrorCode::IncorrectLpMint)?;
+    let total_token_1_amount = ctx.accounts.token_1_vault.amount
+        .checked_add(pool_state.protocol_fees_token_1)
+        .ok_or(ErrorCode::IncorrectLpMint)?;
+
+    let mut amm = pool_state.amm;
+    amm.apply_sell(lp_token_amount.into()).ok_or(ErrorCode::ExceededSlippage)?;
+    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
+
     let results = CurveCalculator::lp_tokens_to_trading_tokens(
         u128::from(lp_token_amount),
         u128::from(pool_state.lp_supply),
@@ -121,8 +122,14 @@ pub fn withdraw(
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
 
-    let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
-    let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
+    // Subtract protocol fees from withdrawal amounts
+    let token_0_amount = u64::try_from(results.token_0_amount).unwrap()
+        .checked_sub(pool_state.protocol_fees_token_0.checked_mul(lp_token_amount).unwrap() / pool_state.lp_supply)
+        .ok_or(ErrorCode::IncorrectLpMint)?;
+    let token_1_amount = u64::try_from(results.token_1_amount).unwrap()
+        .checked_sub(pool_state.protocol_fees_token_1.checked_mul(lp_token_amount).unwrap() / pool_state.lp_supply)
+        .ok_or(ErrorCode::IncorrectLpMint)?;
+
     let (receive_token_0_amount, token_0_transfer_fee) = {
         let transfer_fee = get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
         (
@@ -157,7 +164,6 @@ pub fn withdraw(
     {
         return Err(ErrorCode::ExceededSlippage.into());
     }
-    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
@@ -167,7 +173,6 @@ pub fn withdraw(
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
 
-    let mut amm = pool_state.amm;
     transfer_from_pool_vault_to_user(
         ctx.accounts.authority.to_account_info(),
         ctx.accounts.token_0_vault.to_account_info(),
@@ -178,9 +183,9 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_0_amount,
+        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * token_0_amount,
         ctx.accounts.vault_0_mint.decimals,
-        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
+    &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
 
     transfer_from_pool_vault_to_user(
@@ -193,10 +198,11 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_1_amount,
+        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
+
     pool_state.recent_epoch = Clock::get()?.epoch;
 
     pool_state.amm = amm;

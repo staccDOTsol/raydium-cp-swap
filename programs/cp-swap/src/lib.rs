@@ -22,7 +22,7 @@ solana_security_txt::security_txt! {
 #[cfg(feature = "devnet")]
 declare_id!("CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW");
 #[cfg(not(feature = "devnet"))]
-declare_id!("3D421tPJZJNJi4AuSR8t1ZLBQ7kYYfhxsKTRiSKLdNsb");
+declare_id!("CVF4q3yFpyQwV8DLDiJ9Ew6FFLE1vr5ToRzsXYQTaNrj");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
@@ -140,13 +140,27 @@ pub mod raydium_cp_swap {
         init_amount_0: u64,
         init_amount_1: u64,
         open_time: u64,
+    ) -> Result<()> {
+        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
+    }
+    /// Initialize metadata for the LP token
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The context of accounts
+    /// * `name` - The name of the LP token
+    /// * `symbol` - The symbol of the LP token
+    /// * `uri` - The URI for the LP token metadata
+    ///
+    pub fn initialize_metadata(
+        ctx: Context<InitializeMetadata>,
+        name: String,
         symbol: String,
         uri: String,
-        name: String,
-        bump: u8
     ) -> Result<()> {
-        instructions::initialize(ctx, init_amount_0, init_amount_1, open_time, symbol, uri, name, bump)
+        instructions::initialize_metadata(ctx, name, symbol, uri)
     }
+
 
     /// Creates a pool for the given token pair and the initial price
     ///

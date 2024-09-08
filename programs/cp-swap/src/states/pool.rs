@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 use std::ops::{BitAnd, BitOr, BitXor};
-
 use crate::curve::AMM;
 /// Seed to derive account address and signature
 pub const POOL_SEED: &str = "pool";
@@ -22,7 +21,7 @@ pub enum PoolStatusBitFlag {
 }
 
 #[account(zero_copy(unsafe))]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, AnchorSerialize, AnchorDeserialize)]
 
 #[repr(packed)]
 pub struct PoolState {

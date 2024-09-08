@@ -6,7 +6,6 @@ use crate::utils::token::*;
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
-use spl_math::uint::U256;
 
 #[derive(Accounts)]
 pub struct Deposit<'info> {
@@ -176,7 +175,22 @@ pub fn deposit(
         amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * transfer_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
     )?;
+    // Apply buy price to update AMM state
+     amm.apply_buy(lp_token_amount.into()).ok_or(ErrorCode::ExceededSlippage)?;
 
+    #[cfg(feature = "enable-log")]
+    msg!(
+        "Token 0 buy result - amount: {}, sol: {}",
+        token_0_buy_result.token_amount,
+        token_0_buy_result.sol_amount
+    );
+
+    #[cfg(feature = "enable-log")]
+    msg!(
+        "Token 1 buy result - amount: {}, sol: {}",
+        token_1_buy_result.token_amount,
+        token_1_buy_result.sol_amount
+    );
     // Calculate LP tokens to mint based on deposit amount
     pool_state.amm = amm;
     pool_state.lp_supply = pool_state.lp_supply.checked_add(lp_token_amount.try_into().unwrap()).unwrap();
