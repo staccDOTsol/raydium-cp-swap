@@ -22,7 +22,7 @@ pub enum PoolStatusBitFlag {
 }
 
 #[account(zero_copy(unsafe))]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, AnchorDeserialize)]
 
 #[repr(packed)]
 pub struct PoolState {

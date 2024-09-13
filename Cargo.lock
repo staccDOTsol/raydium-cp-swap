@@ -1163,37 +1163,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
 
 [[package]]
-name = "client"
-version = "0.1.0"
-dependencies = [
- "anchor-client",
- "anchor-lang",
- "anyhow",
- "arrayref",
- "bincode",
- "bs58 0.5.1",
- "clap 4.5.17",
- "colorful",
- "configparser",
- "hex",
- "mpl-token-metadata",
- "rand 0.7.3",
- "raydium-cp-swap",
- "regex",
- "serde",
- "serde_json",
- "solana-account-decoder",
- "solana-client",
- "solana-sdk",
- "solana-transaction-status",
- "spl-associated-token-account 2.3.0",
- "spl-memo",
- "spl-token",
- "spl-token-2022 0.9.0",
- "spl-token-client",
-]
-
-[[package]]
 name = "colorchoice"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1812,6 +1781,37 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "fomo3d-raydium-cp-swap-client"
+version = "0.1.139138138"
+dependencies = [
+ "anchor-client",
+ "anchor-lang",
+ "anyhow",
+ "arrayref",
+ "bincode",
+ "bs58 0.5.1",
+ "clap 4.5.17",
+ "colorful",
+ "configparser",
+ "hex",
+ "mpl-token-metadata",
+ "rand 0.7.3",
+ "raydium-cp-swap",
+ "regex",
+ "serde",
+ "serde_json",
+ "solana-account-decoder",
+ "solana-client",
+ "solana-sdk",
+ "solana-transaction-status",
+ "spl-associated-token-account 2.3.0",
+ "spl-memo",
+ "spl-token",
+ "spl-token-2022 0.9.0",
+ "spl-token-client",
+]
 
 [[package]]
 name = "form_urlencoded"
@@ -3430,7 +3430,7 @@ dependencies = [
 
 [[package]]
 name = "raydium-cp-swap"
-version = "0.1.0"
+version = "0.1.139"
 dependencies = [
  "anchor-lang",
  "anchor-spl",
@@ -3443,7 +3443,7 @@ dependencies = [
  "spl-math",
  "spl-memo",
  "spl-token",
- "spl-token-2022 0.9.0",
+ "spl-token-2022 3.0.4",
  "uint",
 ]
 

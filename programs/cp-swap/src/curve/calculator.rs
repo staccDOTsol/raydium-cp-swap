@@ -89,12 +89,10 @@ impl CurveCalculator {
         source_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        token_0_creator_rate: u64,
-        token_1_creator_rate: u64,
-        token_0_lp_rate: u64,
-        token_1_lp_rate: u64
+        input_token_creator_rate: u64,
+        input_token_lp_rate: u64,
     ) -> Option<SwapResult> {
-        let source_amount_less_fees = source_amount.checked_sub(token_0_creator_rate as u128)?;
+        let source_amount_less_fees = source_amount.checked_sub((input_token_creator_rate as u128 + input_token_lp_rate as u128))?;
 
         let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
             source_amount_less_fees,
@@ -116,10 +114,8 @@ impl CurveCalculator {
         destinsation_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        token_0_creator_rate: u64,
-        token_1_creator_rate: u64,
-        token_0_lp_rate: u64,
-        token_1_lp_rate: u64
+        input_token_creator_rate: u64,
+        input_token_lp_rate: u64
     ) -> Option<SwapResult> {
         let source_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
             destinsation_amount,
@@ -127,7 +123,7 @@ impl CurveCalculator {
             swap_destination_amount,
         );
 
-        let source_amount = source_amount_swapped - (token_0_creator_rate as u128+token_0_lp_rate as u128);
+        let source_amount = source_amount_swapped - (input_token_creator_rate as u128+input_token_lp_rate as u128);
 
         Some(SwapResult {
             new_swap_source_amount: swap_source_amount.checked_add(source_amount)?,
