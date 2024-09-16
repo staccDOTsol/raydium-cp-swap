@@ -1,8 +1,7 @@
 [workspace]
 members = [
-    "programs/*",
-    "fomo3d-raydium-cp-swap-client",
-]
+    "programs/*"
+    ]
 
 [profile.release]
 overflow-checks = true

@@ -173,7 +173,7 @@ pub fn deposit(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * transfer_token_1_amount,
+        amm.apply_buy(lp_token_amount.into()).unwrap().sol_amount as u64 * transfer_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
     )?;
 

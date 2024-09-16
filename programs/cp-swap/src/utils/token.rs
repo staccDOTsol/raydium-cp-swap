@@ -192,9 +192,9 @@ pub fn create_token_account<'a>(
             let mint_extensions = mint_state.get_extension_types()?;
             let required_extensions =
                 ExtensionType::get_required_init_account_extensions(&mint_extensions);
-            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                &required_extensions,
-            )?
+                ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                    &required_extensions,
+                )?
         } else {
             TokenAccount::LEN
         }

@@ -166,7 +166,7 @@ pub fn withdraw(
         lp_token_amount as u64,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-
+    
     let mut amm = pool_state.amm;
     transfer_from_pool_vault_to_user(
         ctx.accounts.authority.to_account_info(),
@@ -178,7 +178,7 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_0_amount,
+        amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * receive_token_0_amount,
         ctx.accounts.vault_0_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
@@ -193,10 +193,11 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        amm.get_sell_price(lp_token_amount.into()).unwrap() as u64 * receive_token_1_amount,
+        amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * receive_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
+    amm.apply_sell(lp_token_amount.into()).unwrap();
     pool_state.recent_epoch = Clock::get()?.epoch;
 
     pool_state.amm = amm;

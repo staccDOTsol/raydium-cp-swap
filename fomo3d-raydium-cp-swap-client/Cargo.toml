@@ -9,16 +9,16 @@ description = "Client for Raydium CP Swap"  # Added description field
 [dependencies]
 anchor-client = "0.30.1"
 anchor-lang = "0.30.1"
-raydium-cp-swap = { version = "0.1.0", path = "../programs/cp-swap", features = ["no-entrypoint", "client"] }
+raydium-cp-swap = "*"
 solana-sdk = ">=1.14, < 1.19"
 solana-client = ">=1.14, < 1.19"
 solana-account-decoder = ">=1.14, < 1.19"
 solana-transaction-status = ">=1.14, < 1.19"
-spl-token = { version = "4.0.0", features=["no-entrypoint"] }
+spl-token = { version = "^3", features=["no-entrypoint"] }
 spl-token-client = "0.7.0"
-spl-memo = "4.0.0"
+spl-memo = "^3"
 spl-associated-token-account = { version = "2.2.0", features = ["no-entrypoint"]}
-spl-token-2022 = { version = "0.9.0", features = ["no-entrypoint"]}
+spl-token-2022 = { version = "*", features = ["no-entrypoint"]}
 clap = { version = "4.1.8", features = ["derive"] }
 anyhow = "1.0.32"
 rand = "0.7.3"

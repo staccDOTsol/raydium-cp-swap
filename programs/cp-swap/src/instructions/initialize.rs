@@ -3,10 +3,12 @@ use crate::curve::AMM;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
-use anchor_spl::metadata::create_metadata_accounts_v3;
-use anchor_spl::metadata::mpl_token_metadata::types::DataV2;
-use anchor_spl::metadata::CreateMetadataAccountsV3;
-use anchor_spl::metadata::Metadata;
+
+use anchor_spl::metadata::{
+    create_metadata_accounts_v3,
+    CreateMetadataAccountsV3,
+    Metadata,
+};
 use spl_token_2022::state::Mint as m2;
 use anchor_lang::{
     prelude::*,
@@ -31,7 +33,6 @@ use anchor_spl::{
         Token2022,
         spl_token_2022::{
             extension::ExtensionType,
-            extension::metadata_pointer,
             instruction::AuthorityType,
         },
     },
@@ -249,7 +250,7 @@ pub fn initialize_metadata(
 
     let seeds = &[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]];
     let signer = [&seeds[..]];
-
+/*
     let token_data: DataV2 = DataV2 {
         name: name.clone(),
         symbol: symbol.clone(),
@@ -275,7 +276,7 @@ pub fn initialize_metadata(
     );
 
     create_metadata_accounts_v3(metadata_ctx, token_data, false, true, None)?;
-
+*/
 
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
@@ -366,9 +367,10 @@ pub fn initialize(
         ctx.accounts.token_1_vault.to_account_info(),
         ctx.accounts.token_1_mint.to_account_info(),
         ctx.accounts.token_1_program.to_account_info(),
-        amm.get_buy_price(liquidity.into()).unwrap() as u64 * init_amount_1,
+        amm.apply_buy(liquidity.into()).unwrap().sol_amount as u64 * init_amount_1,
         ctx.accounts.token_1_mint.decimals,
     )?;
+   
     pool_state.amm = amm;
     let token_0_vault =
         spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
