@@ -1,6 +1,6 @@
 [package]
 name = "fomo3d-raydium-cp-swap-client"
-version = "0.1.0"
+version = "0.1.139138138"
 rust-version = "1.75.0"
 edition = "2021"
 license = "MIT"

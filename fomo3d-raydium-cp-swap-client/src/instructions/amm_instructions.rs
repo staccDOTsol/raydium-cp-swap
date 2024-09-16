@@ -16,6 +16,51 @@ use raydium_cp_swap::{
 use std::rc::Rc;
 
 use super::super::{read_keypair_file, ClientConfig};
+
+pub fn collect_protocol_fee_instr(
+    config: &ClientConfig,
+    pool_id: Pubkey,
+    token_0_vault: Pubkey,
+    token_1_vault: Pubkey,
+    token_0_mint: Pubkey,
+    token_1_mint: Pubkey,
+    recipient_token_0_account: Pubkey,
+    recipient_token_1_account: Pubkey,
+    amount_0_requested: u64,
+    amount_1_requested: u64,
+    amm_config: Pubkey,
+) -> Result<Vec<Instruction>> {
+    let payer = read_keypair_file(&config.payer_path)?;
+    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+    // Client.
+    let client = Client::new(url, Rc::new(payer));
+    let program = client.program(config.raydium_cp_program)?;
+
+    let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
+
+    let instructions = program
+        .request()
+        .accounts(raydium_cp_accounts::CollectProtocolFee {
+            authority,
+            pool_state: pool_id,
+            token_0_vault,
+            amm_config,
+            owner: program.payer(),
+            token_1_vault,
+            recipient_token_0_account,
+            recipient_token_1_account,
+            token_program: spl_token::id(),
+            token_program_2022: spl_token_2022::id(),
+            vault_0_mint: token_0_mint,
+            vault_1_mint: token_1_mint,
+        })
+        .args(raydium_cp_instructions::CollectProtocolFee {
+            amount_0_requested,
+            amount_1_requested,
+        })
+        .instructions()?;
+    Ok(instructions)
+}
 pub fn collect_fund_fee_instr(
     config: &ClientConfig,
     pool_id: Pubkey,
@@ -117,7 +162,8 @@ pub fn initialize_pool_instr(
     symbol: String,
     uri: String,
     name: String,
-    lp_mint: Pubkey
+    lp_mint: Pubkey,
+    amm_config_index: u64
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
@@ -125,7 +171,6 @@ pub fn initialize_pool_instr(
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_cp_program)?;
 
-    let amm_config_index = 0u64;
     let (amm_config_key, __bump) = Pubkey::find_program_address(
         &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
         &program.id(),
