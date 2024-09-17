@@ -44,9 +44,13 @@ impl AMM {
             return None;
         }
 
-        let product_of_reserves = self.virtual_sol_reserves.checked_mul(self.virtual_token_reserves)?;
+        let product_of_reserves = self
+            .virtual_sol_reserves
+            .checked_mul(self.virtual_token_reserves)?;
         let new_virtual_token_reserves = self.virtual_token_reserves.checked_sub(tokens)?;
-        let new_virtual_sol_reserves = product_of_reserves.checked_div(new_virtual_token_reserves)?.checked_add(1)?;
+        let new_virtual_sol_reserves = product_of_reserves
+            .checked_div(new_virtual_token_reserves)?
+            .checked_add(1)?;
         let amount_needed = new_virtual_sol_reserves.checked_sub(self.virtual_sol_reserves)?;
 
         Some(amount_needed)
@@ -61,7 +65,9 @@ impl AMM {
 
         let sol_amount = self.get_buy_price(final_token_amount)?;
 
-        self.virtual_token_reserves = self.virtual_token_reserves.checked_sub(final_token_amount)?;
+        self.virtual_token_reserves = self
+            .virtual_token_reserves
+            .checked_sub(final_token_amount)?;
         self.real_token_reserves = self.real_token_reserves.checked_sub(final_token_amount)?;
 
         self.virtual_sol_reserves = self.virtual_sol_reserves.checked_add(sol_amount)?;
@@ -97,12 +103,14 @@ impl AMM {
 
         let scaled_tokens = tokens.checked_mul(scaling_factor)?;
         let token_sell_proportion = scaled_tokens.checked_div(self.virtual_token_reserves)?;
-        let sol_received = (self.virtual_sol_reserves.checked_mul(token_sell_proportion)?).checked_div(scaling_factor)?;
+        let sol_received = (self
+            .virtual_sol_reserves
+            .checked_mul(token_sell_proportion)?)
+        .checked_div(scaling_factor)?;
 
         Some(sol_received.min(self.real_sol_reserves))
     }
 }
-
 
 impl fmt::Display for AMM {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

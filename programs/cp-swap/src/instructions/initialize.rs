@@ -4,55 +4,19 @@ use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
 
-use anchor_spl::metadata::{
-    create_metadata_accounts_v3,
-    CreateMetadataAccountsV3,
-    Metadata,
-};
-use spl_token_2022::state::Mint as m2;
 use anchor_lang::{
-    prelude::*,
-    solana_program::{
-        program::{invoke, invoke_signed},
-        clock,
-        system_instruction,
-    },
+    accounts::interface_account::InterfaceAccount, prelude::*, solana_program::clock,
     system_program,
-    accounts::interface_account::InterfaceAccount,
 };
+use anchor_spl::metadata::Metadata;
 
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::Token,
-    token_2022::{
-        self,
-        SetAuthority,
-        initialize_mint2,
-        InitializeMint,
-        InitializeMint2,
-        Token2022,
-        spl_token_2022::{
-            extension::ExtensionType,
-            instruction::AuthorityType,
-        },
-    },
-    token_interface::{
-        self as token,
-        mint_to,
-        Mint,
-        MintTo,
-        TokenAccount,
-        TokenInterface,
-    },
+    token_interface::{Mint, TokenAccount, TokenInterface},
 };
 
-use spl_token_2022::state::Mint as Mint2022;
 use std::ops::Deref;
-const DEFAULT_INITIAL_TOKEN_RESERVES: u64 = 793_100_000_000_000_000;
-const DEFAULT_INITIAL_VIRTUAL_SOL_RESERVE: u64 = 30_000_000_000;
-const DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE: u64 = 1_073_000_000_000_000_000;
-const DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE: u64 = 1_073_000_000_000_000_000;
-
 #[derive(Accounts)]
 #[instruction(
     init_amount_0: u64,
@@ -181,9 +145,7 @@ pub struct Initialize<'info> {
     /// Sysvar for program account
     pub rent: Sysvar<'info, Rent>,
     /// CHECK: This is not dangerous because we don't read or write from this account
-   
     pub observation_state: UncheckedAccount<'info>,
-
 }
 
 #[derive(Accounts)]
@@ -194,14 +156,14 @@ pub struct InitializeMetadata<'info> {
     )]
     pub creator: Signer<'info>,
     /// CHECK: This is not dangerous because we don't read or write from this account
- /// CHECK: pool vault and lp mint authority
- #[account(
+    /// CHECK: pool vault and lp mint authority
+    #[account(
     seeds = [
         crate::AUTH_SEED.as_bytes(),
     ],
     bump,
 )]
-pub authority: UncheckedAccount<'info>,
+    pub authority: UncheckedAccount<'info>,
     #[account(mut)]
     pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
     pub token_metadata_program: Program<'info, Metadata>,
@@ -240,50 +202,13 @@ pub authority: UncheckedAccount<'info>,
 
 pub fn initialize_metadata(
     ctx: Context<InitializeMetadata>,
-    name: String,
-    symbol: String,
-    uri: String,
 ) -> Result<()> {
-    let name = name.to_string();
-    let symbol = symbol.to_string();
-    let uri = uri.to_string();
-
-    let seeds = &[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]];
-    let signer = [&seeds[..]];
-/*
-    let token_data: DataV2 = DataV2 {
-        name: name.clone(),
-        symbol: symbol.clone(),
-        uri: uri.clone(),
-        seller_fee_basis_points: 0,
-        creators: None,
-        collection: None,
-        uses: None,
-    };
-
-    let metadata_ctx = CpiContext::new_with_signer(
-        ctx.accounts.token_metadata_program.to_account_info(),
-        CreateMetadataAccountsV3 {
-            payer: ctx.accounts.creator.to_account_info(),
-            update_authority: ctx.accounts.authority.to_account_info(),
-            mint: ctx.accounts.lp_mint.to_account_info(),
-            metadata: ctx.accounts.metadata.to_account_info(),
-            mint_authority: ctx.accounts.authority.to_account_info(),
-            system_program: ctx.accounts.system_program.to_account_info(),
-            rent: ctx.accounts.rent.to_account_info(),
-        },
-        &signer,
-    );
-
-    create_metadata_accounts_v3(metadata_ctx, token_data, false, true, None)?;
-*/
-
+  
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
 
     Ok(())
 }
-
 
 pub fn initialize(
     ctx: Context<Initialize>,
@@ -291,11 +216,11 @@ pub fn initialize(
     init_amount_1: u64,
     mut open_time: u64,
 ) -> Result<()> {
-  //  if !(is_supported_mint(&ctx.accounts.token_0_mint).unwrap()
-   //     && is_supported_mint(&ctx.accounts.token_1_mint).unwrap())
+    //  if !(is_supported_mint(&ctx.accounts.token_0_mint).unwrap()
+    //     && is_supported_mint(&ctx.accounts.token_1_mint).unwrap())
     //{
-     //   return err!(ErrorCode::NotSupportMint);
- //   }
+    //   return err!(ErrorCode::NotSupportMint);
+    //   }
 
     if ctx.accounts.amm_config.disable_create_pool {
         return err!(ErrorCode::NotApproved);
@@ -370,7 +295,7 @@ pub fn initialize(
         amm.apply_buy(liquidity.into()).unwrap().sol_amount as u64 * init_amount_1,
         ctx.accounts.token_1_mint.decimals,
     )?;
-   
+
     pool_state.amm = amm;
     let token_0_vault =
         spl_token_2022::extension::StateWithExtensions::<spl_token_2022::state::Account>::unpack(
@@ -391,7 +316,6 @@ pub fn initialize(
         )?
         .base;
 
-
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
     let lock_lp_amount = 100;
@@ -403,20 +327,23 @@ pub fn initialize(
         token_1_vault.amount
     );
     // Mint LP tokens
-    
-    pool_state.lp_supply = pool_state.lp_supply.checked_add(liquidity.try_into().unwrap()).unwrap();
 
-        crate::utils::token_mint_to(
-            ctx.accounts.authority.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.lp_mint.to_account_info(),
-            ctx.accounts.creator_lp_token.to_account_info(),
-            (liquidity as u64)
-                .checked_sub(lock_lp_amount)
-                .ok_or(ErrorCode::InitLpAmountTooLess)?,
-            &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
-        )?;
-    
+    pool_state.lp_supply = pool_state
+        .lp_supply
+        .checked_add(liquidity.try_into().unwrap())
+        .unwrap();
+
+    crate::utils::token_mint_to(
+        ctx.accounts.authority.to_account_info(),
+        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.lp_mint.to_account_info(),
+        ctx.accounts.creator_lp_token.to_account_info(),
+        (liquidity as u64)
+            .checked_sub(lock_lp_amount)
+            .ok_or(ErrorCode::InitLpAmountTooLess)?,
+        &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
+    )?;
+
     pool_state.initialize(
         ctx.bumps.authority,
         liquidity as u64,

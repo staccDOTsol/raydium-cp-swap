@@ -12,7 +12,6 @@ pub fn swap_base_output(
     amount_out_less_fee: u64,
 ) -> Result<()> {
     let block_timestamp = solana_program::clock::Clock::get()?.unix_timestamp as u64;
-    let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Swap)
         || block_timestamp < pool_state.open_time
@@ -64,11 +63,11 @@ pub fn swap_base_output(
     let (input_token_creator_rate, input_token_lp_rate) = match trade_direction {
         TradeDirection::ZeroForOne => (
             ctx.accounts.amm_config.token_0_creator_rate,
-            ctx.accounts.amm_config.token_0_lp_rate
+            ctx.accounts.amm_config.token_0_lp_rate,
         ),
         TradeDirection::OneForZero => (
             ctx.accounts.amm_config.token_1_creator_rate,
-            ctx.accounts.amm_config.token_1_lp_rate
+            ctx.accounts.amm_config.token_1_lp_rate,
         ),
     };
 
@@ -77,12 +76,10 @@ pub fn swap_base_output(
         u128::from(total_input_token_amount),
         u128::from(total_output_token_amount),
         input_token_creator_rate,
-        input_token_lp_rate
+        input_token_lp_rate,
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
-let protocol_fee = (  input_token_creator_rate + 
-    input_token_lp_rate) / 10000 * 2;
-
+    let protocol_fee = (input_token_creator_rate + input_token_lp_rate) / 10000 * 2;
 
     let constant_after = u128::from(result.new_swap_source_amount)
         .checked_mul(u128::from(result.new_swap_destination_amount))
@@ -99,7 +96,7 @@ let protocol_fee = (  input_token_creator_rate +
     require_gte!(constant_after, constant_before);
 
     // Re-calculate the source amount swapped based on what the curve says
-    let (input_transfer_amount, input_transfer_fee) = {
+    let (input_transfer_amount, _input_transfer_fee) = {
         let source_amount_swapped = u64::try_from(result.source_amount_swapped).unwrap();
         require_gt!(source_amount_swapped, 0);
         let transfer_fee = get_transfer_inverse_fee(
@@ -118,24 +115,28 @@ let protocol_fee = (  input_token_creator_rate +
         u64::try_from(result.destination_amount_swapped).unwrap(),
         actual_amount_out
     );
-    let (output_transfer_amount, output_transfer_fee) = (actual_amount_out, out_transfer_fee);
-  
+    let (output_transfer_amount, _output_transfer_fee) = (actual_amount_out, out_transfer_fee);
+
     match trade_direction {
         TradeDirection::ZeroForOne => {
             pool_state.protocol_fees_token_0 = pool_state
                 .protocol_fees_token_0
                 .checked_add(protocol_fee)
                 .unwrap();
-            pool_state.fund_fees_token_0 =
-                pool_state.fund_fees_token_0.checked_add(ctx.accounts.amm_config.token_0_creator_rate).unwrap();
+            pool_state.fund_fees_token_0 = pool_state
+                .fund_fees_token_0
+                .checked_add(ctx.accounts.amm_config.token_0_creator_rate)
+                .unwrap();
         }
         TradeDirection::OneForZero => {
             pool_state.protocol_fees_token_1 = pool_state
                 .protocol_fees_token_1
                 .checked_add(protocol_fee)
                 .unwrap();
-            pool_state.fund_fees_token_1 =
-                pool_state.fund_fees_token_1.checked_add(ctx.accounts.amm_config.token_0_creator_rate).unwrap();
+            pool_state.fund_fees_token_1 = pool_state
+                .fund_fees_token_1
+                .checked_add(ctx.accounts.amm_config.token_0_creator_rate)
+                .unwrap();
         }
     };
 

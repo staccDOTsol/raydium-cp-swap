@@ -4,7 +4,6 @@ pub mod instructions;
 pub mod states;
 pub mod utils;
 
-use crate::curve::fees::FEE_RATE_DENOMINATOR_VALUE;
 use anchor_lang::prelude::*;
 use instructions::*;
 
@@ -154,13 +153,12 @@ pub mod raydium_cp_swap {
     ///
     pub fn initialize_metadata(
         ctx: Context<InitializeMetadata>,
-        name: String,
-        symbol: String,
-        uri: String,
+        _name: String,
+        _symbol: String,
+        _uri: String,
     ) -> Result<()> {
-        instructions::initialize_metadata(ctx, name, symbol, uri)
+        instructions::initialize_metadata(ctx)
     }
-
 
     /// Creates a pool for the given token pair and the initial price
     ///
@@ -176,7 +174,6 @@ pub mod raydium_cp_swap {
         lp_token_amount: u64,
         maximum_token_0_amount: u64,
         maximum_token_1_amount: u64,
-        
     ) -> Result<()> {
         instructions::deposit(
             ctx,

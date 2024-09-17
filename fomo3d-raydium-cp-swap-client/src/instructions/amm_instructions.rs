@@ -134,14 +134,15 @@ pub fn initialize_amm_config_instr(
         system_program: system_program::ID,
     };
 
-    let ix = program.request()
+    let ix = program
+        .request()
         .accounts(accounts)
         .args(raydium_cp_instructions::CreateAmmConfig {
             index: amm_config_index,
             token_0_creator_rate,
             token_1_lp_rate,
             token_0_lp_rate,
-            token_1_creator_rate
+            token_1_creator_rate,
         })
         .instructions()?;
 
@@ -163,7 +164,7 @@ pub fn initialize_pool_instr(
     uri: String,
     name: String,
     lp_mint: Pubkey,
-    amm_config_index: u64
+    amm_config_index: u64,
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path)?;
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
@@ -243,7 +244,6 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
-        
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,
@@ -273,7 +273,8 @@ pub fn initialize_pool_instr(
                     lp_mint_key.as_ref(),
                 ],
                 &mpl_token_metadata::ID,
-            ).0,
+            )
+            .0,
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
             amm_config: amm_config_key,
@@ -284,7 +285,7 @@ pub fn initialize_pool_instr(
             uri: uri.clone(),
         })
         .instructions()?;
-    
+
     instructions.extend(metadata_instruction);
     Ok(instructions)
 }
@@ -331,8 +332,8 @@ pub fn deposit_instr(
         })
         .args(raydium_cp_instructions::Deposit {
             lp_token_amount,
-            maximum_token_0_amount:u64::MAX,
-            maximum_token_1_amount:u64::MAX,
+            maximum_token_0_amount: u64::MAX,
+            maximum_token_1_amount: u64::MAX,
         })
         .instructions()?;
 

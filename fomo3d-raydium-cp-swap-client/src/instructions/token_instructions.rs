@@ -39,7 +39,7 @@ pub fn create_and_init_mint_instr(
         .iter()
         .map(|e| e.extension())
         .collect::<Vec<_>>();
-    
+
     Ok(vec![])
 }
 

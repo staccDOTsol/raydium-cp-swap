@@ -1,6 +1,6 @@
 //! Swap calculations
 
-use crate::curve::{constant_product::ConstantProductCurve, fees::Fees};
+use crate::curve::constant_product::ConstantProductCurve;
 use anchor_lang::prelude::*;
 use {crate::error::ErrorCode, std::fmt::Debug};
 
@@ -65,7 +65,6 @@ pub struct SwapResult {
     pub source_amount_swapped: u128,
     /// Amount of destination token swapped
     pub destination_amount_swapped: u128,
-
 }
 
 /// Concrete struct to wrap around the trait object which performs calculation.
@@ -92,7 +91,8 @@ impl CurveCalculator {
         input_token_creator_rate: u64,
         input_token_lp_rate: u64,
     ) -> Option<SwapResult> {
-        let source_amount_less_fees = source_amount.checked_sub((input_token_creator_rate as u128 + input_token_lp_rate as u128))?;
+        let source_amount_less_fees = source_amount
+            .checked_sub(input_token_creator_rate as u128 + input_token_lp_rate as u128)?;
 
         let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
             source_amount_less_fees,
@@ -106,7 +106,6 @@ impl CurveCalculator {
                 .checked_sub(destination_amount_swapped)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped,
-
         })
     }
 
@@ -115,7 +114,7 @@ impl CurveCalculator {
         swap_source_amount: u128,
         swap_destination_amount: u128,
         input_token_creator_rate: u64,
-        input_token_lp_rate: u64
+        input_token_lp_rate: u64,
     ) -> Option<SwapResult> {
         let source_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
             destinsation_amount,
@@ -123,7 +122,8 @@ impl CurveCalculator {
             swap_destination_amount,
         );
 
-        let source_amount = source_amount_swapped - (input_token_creator_rate as u128+input_token_lp_rate as u128);
+        let source_amount = source_amount_swapped
+            - (input_token_creator_rate as u128 + input_token_lp_rate as u128);
 
         Some(SwapResult {
             new_swap_source_amount: swap_source_amount.checked_add(source_amount)?,
@@ -131,7 +131,6 @@ impl CurveCalculator {
                 .checked_sub(destinsation_amount)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped: destinsation_amount,
-      
         })
     }
 

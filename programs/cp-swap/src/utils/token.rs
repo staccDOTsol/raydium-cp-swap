@@ -13,18 +13,9 @@ use anchor_spl::{
         },
     },
     token_interface::{
-        initialize_account3, spl_token_2022::extension::BaseStateWithExtensions,
-        InitializeAccount3, Mint,
+        initialize_account3, spl_token_2022::extension::BaseStateWithExtensions, InitializeAccount3,
     },
 };
-use std::collections::HashSet;
-
-const MINT_WHITELIST: [&'static str; 4] = [
-    "HVbpJAQGNpkgBaYBZQBR1t7yFdvaYVp2vCQQfKKEN4tM",
-    "Crn4x1Y2HUKko7ox2EZMT6N2t2ZyH7eKtwkBGVnhEq1g",
-    "FrBfWJ4qE5sCzKm3k3JaAtqZcXUh4LvJygDeketsrsH4",
-    "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo",
-];
 
 pub fn transfer_from_user_to_pool_vault<'a>(
     authority: AccountInfo<'a>,
@@ -173,7 +164,6 @@ pub fn get_transfer_fee(mint_info: &AccountInfo, pre_fee_amount: u64) -> Result<
     Ok(fee)
 }
 
-
 pub fn create_token_account<'a>(
     authority: &AccountInfo<'a>,
     payer: &AccountInfo<'a>,
@@ -192,9 +182,9 @@ pub fn create_token_account<'a>(
             let mint_extensions = mint_state.get_extension_types()?;
             let required_extensions =
                 ExtensionType::get_required_init_account_extensions(&mint_extensions);
-                ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
-                    &required_extensions,
-                )?
+            ExtensionType::try_calculate_account_len::<spl_token_2022::state::Account>(
+                &required_extensions,
+            )?
         } else {
             TokenAccount::LEN
         }

@@ -23,7 +23,6 @@ pub enum PoolStatusBitFlag {
 
 #[account(zero_copy(unsafe))]
 #[derive(Default, Debug, AnchorDeserialize)]
-
 #[repr(packed)]
 pub struct PoolState {
     /// Which config the pool belongs
@@ -82,11 +81,11 @@ pub struct PoolState {
     /// padding for future updates
     pub token_0_vault_safu: Pubkey,
     pub token_1_vault_safu: Pubkey,
-    pub padding: [u64; 31-1-4-4],
+    pub padding: [u64; 31 - 1 - 4 - 4],
 }
 
 impl PoolState {
-    pub const LEN: usize = 733+8;
+    pub const LEN: usize = 733 + 8;
 
     pub fn initialize(
         &mut self,
@@ -123,7 +122,7 @@ impl PoolState {
         self.fund_fees_token_1 = 0;
         self.open_time = open_time;
         self.recent_epoch = Clock::get().unwrap().epoch;
-        self.padding = [0u64; 31-1-4-4];
+        self.padding = [0u64; 31 - 1 - 4 - 4];
     }
 
     pub fn set_status(&mut self, status: u8) {
