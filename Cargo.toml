@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "programs/*"
+    "programs/*", "fomo3d*"
     ]
 
 [profile.release]

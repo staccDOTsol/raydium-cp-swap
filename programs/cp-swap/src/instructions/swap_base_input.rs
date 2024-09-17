@@ -40,14 +40,22 @@ pub struct Swap<'info> {
     /// The vault token account for input token
     #[account(
         mut,
-        constraint = input_vault.key() == pool_state.load()?.token_0_vault || input_vault.key() == pool_state.load()?.token_1_vault
+        constraint = (
+            input_vault.key() == pool_state.load()?.token_0_vault || input_vault.key() == pool_state.load()?.token_1_vault
+        ) || (
+            input_vault.key() == pool_state.load()?.token_0_vault_safu || input_vault.key() == pool_state.load()?.token_1_vault_safu
+        )
     )]
     pub input_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// The vault token account for output token
     #[account(
         mut,
-        constraint = output_vault.key() == pool_state.load()?.token_0_vault || output_vault.key() == pool_state.load()?.token_1_vault
+        constraint = (
+            output_vault.key() == pool_state.load()?.token_0_vault || output_vault.key() == pool_state.load()?.token_1_vault
+        ) || (
+            output_vault.key() == pool_state.load()?.token_0_vault_safu || output_vault.key() == pool_state.load()?.token_1_vault_safu
+        )
     )]
     pub output_vault: Box<InterfaceAccount<'info, TokenAccount>>,
 

@@ -39,28 +39,8 @@ pub fn create_and_init_mint_instr(
         .iter()
         .map(|e| e.extension())
         .collect::<Vec<_>>();
-    let space = ExtensionType::try_calculate_account_len::<Mint>(&extension_types)?;
-
-    let mut instructions = vec![system_instruction::create_account(
-        &program.payer(),
-        mint_key,
-        program
-            .rpc()
-            .get_minimum_balance_for_rent_exemption(space)?,
-        space as u64,
-        &program.id(),
-    )];
-    for params in extension_init_params {
-        instructions.push(params.instruction(&token_program, &mint_key)?);
-    }
-    instructions.push(spl_token_2022::instruction::initialize_mint(
-        &program.id(),
-        mint_key,
-        mint_authority,
-        freeze_authority,
-        decimals,
-    )?);
-    Ok(instructions)
+    
+    Ok(vec![])
 }
 
 pub fn create_account_rent_exmpt_instr(

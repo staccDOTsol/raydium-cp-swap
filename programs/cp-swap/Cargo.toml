@@ -1,6 +1,6 @@
 [package]
 name = "raydium-cp-swap"
-version = "0.1.139"
+version = "0.1.1391"
 description = "Created with Anchor"
 edition = "2021"
 license = "MIT"
@@ -17,7 +17,7 @@ default = []
 enable-log = []
 devnet = []
 fomo3d-raydium-cp-swap-client = []
-
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 [dependencies]
 anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
 anchor-spl = { version = "0.30.1", features = ["metadata"] }
@@ -29,6 +29,7 @@ solana-security-txt = "1.1.1"
 bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
 spl-token-2022 = "3.0.2"
+mpl-token-metadata = "4.1.2"
 [dev-dependencies]
 quickcheck = "0.9"
 proptest = "1.0"
