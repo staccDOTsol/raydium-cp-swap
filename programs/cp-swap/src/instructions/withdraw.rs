@@ -1,10 +1,11 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
+use crate::curve::DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
+use crate::utils::U128;
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
 
@@ -94,283 +95,143 @@ pub struct Withdraw<'info> {
         address = spl_memo::id()
     )]
     pub memo_program: UncheckedAccount<'info>,
-    /// pool lp mint
-    #[account(
-      mut,
-      seeds = [
-          "pool_lp_mint_safu".as_bytes(),
-          pool_state.key().as_ref(),
-      ],
-      bump,
-      mint::decimals = 9,
-      mint::authority = authority,
-      mint::token_program = token_program,
-  )]
-    pub lp_mint_safu: Box<InterfaceAccount<'info, Mint>>,
-    pub system_program: Program<'info, System>,
-    /// owner lp token account
-    #[account(
-          mut,
-          associated_token::mint = lp_mint_safu,
-          associated_token::authority = owner,
-          token::token_program = token_program,
-      )]
-    pub owner_lp_token_safu: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    /// CHECK: Token_0 vault for the pool (SAFU)
-    #[account(
-          mut,
-          seeds = [
-              "pool_vault_safu".as_bytes(),
-              pool_state.key().as_ref(),
-              vault_0_mint.key().as_ref()
-          ],
-          bump,
-          token::mint = vault_0_mint,
-          token::authority = authority,
-          token::token_program = token_program,
-      )]
-    pub token_0_vault_safu: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    /// CHECK: Token_1 vault for the pool (SAFU)
-    #[account(
-          mut,
-          seeds = [
-              "pool_vault_safu".as_bytes(),
-              pool_state.key().as_ref(),
-              vault_1_mint.key().as_ref()
-          ],
-          bump,
-          token::mint = vault_1_mint,
-          token::authority = authority,
-          token::token_program = token_program,
-      )]
-    pub token_1_vault_safu: Box<InterfaceAccount<'info, TokenAccount>>,
-
-    /// CHECK: Metadata account for the original LP mint
-    pub metadata_account: UncheckedAccount<'info>,
-
-    /// CHECK: New metadata account for the SAFU LP mint
-    #[account(mut)]
-    pub new_metadata_account: UncheckedAccount<'info>,
-
-    pub rent: UncheckedAccount<'info>,
-
-    /// CHECK: Metaplex token metadata program
-    pub metadata_program: UncheckedAccount<'info>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
 }
-
-pub fn withdraw<'info>(
-    ctx: Context<'_, '_, '_, 'info, Withdraw<'info>>,
+pub fn withdraw(
+    ctx: Context<Withdraw>,
     lp_token_amount: u64,
     minimum_token_0_amount: u64,
     minimum_token_1_amount: u64,
 ) -> Result<()> {
     require_gt!(ctx.accounts.lp_mint.supply, 0);
+    let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Withdraw) {
         return err!(ErrorCode::NotApproved);
     }
-    let is_safu = ctx.remaining_accounts.len() > 1;
-    if is_safu {
-        let token_0_vault_safu = &ctx.accounts.token_0_vault_safu;
-        let token_1_vault_safu = &ctx.accounts.token_1_vault_safu;
-        let token_0_vault_safu_account = &ctx.accounts.token_0_vault_safu;
-        let token_1_vault_safu_account = &ctx.accounts.token_1_vault_safu;
-        let lp_mint_safu = &ctx.accounts.lp_mint_safu;
-        let owner_lp_token_safu = &ctx.accounts.owner_lp_token_safu;
-
-        let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
-            token_0_vault_safu_account.amount,
-            token_1_vault_safu_account.amount,
-        );
-        let results = CurveCalculator::lp_tokens_to_trading_tokens(
-            u128::from(lp_token_amount),
-            u128::from(pool_state.safu_lp_supply),
-            u128::from(total_token_0_amount),
-            u128::from(total_token_1_amount),
-            RoundDirection::Floor,
-        )
-        .ok_or(ErrorCode::ZeroTradingTokens)?;
-
-        let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
-        let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
-        let (receive_token_0_amount, _token_0_transfer_fee) = {
-            let transfer_fee =
-                get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
-            (
-                token_0_amount.checked_sub(transfer_fee).unwrap(),
-                transfer_fee,
-            )
-        };
-
-        let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
-        let token_1_amount = std::cmp::min(total_token_1_amount, token_1_amount);
-        let (receive_token_1_amount, _token_1_transfer_fee) = {
-            let transfer_fee =
-                get_transfer_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
-            (
-                token_1_amount.checked_sub(transfer_fee).unwrap(),
-                transfer_fee,
-            )
-        };
-
-        #[cfg(feature = "enable-log")]
-        msg!(
-        "SAFU: results.token_0_amount;{}, results.token_1_amount:{},receive_token_0_amount:{},token_0_transfer_fee:{},
-            receive_token_1_amount:{},token_1_transfer_fee:{}",
-        results.token_0_amount,
-        results.token_1_amount,
-        receive_token_0_amount,
-        token_0_transfer_fee,
-        receive_token_1_amount,
-        token_1_transfer_fee
+    let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
+        ctx.accounts.token_0_vault.amount,
+        ctx.accounts.token_1_vault.amount,
     );
-        if receive_token_0_amount < minimum_token_0_amount
-            || receive_token_1_amount < minimum_token_1_amount
-        {
-            return Err(ErrorCode::ExceededSlippage.into());
-        }
-        pool_state.safu_lp_supply = pool_state
-            .safu_lp_supply
-            .checked_sub(lp_token_amount)
-            .unwrap();
-        token_burn(
-            ctx.accounts.owner.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-            lp_mint_safu.to_account_info(),
-            owner_lp_token_safu.to_account_info(),
-            lp_token_amount as u64,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
+    let results = CurveCalculator::lp_tokens_to_trading_tokens(
+        u128::from(lp_token_amount),
+        u128::from(pool_state.lp_supply),
+        u128::from(total_token_0_amount),
+        u128::from(total_token_1_amount),
+        RoundDirection::Floor,
+    )
+    .ok_or(ErrorCode::ZeroTradingTokens)?;
 
-        transfer_from_pool_vault_to_user(
-            ctx.accounts.authority.to_account_info(),
-            token_0_vault_safu.to_account_info(),
-            ctx.accounts.token_0_account.to_account_info(),
-            ctx.accounts.vault_0_mint.to_account_info(),
-            if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
-                ctx.accounts.token_program.to_account_info()
-            } else {
-                ctx.accounts.token_program_2022.to_account_info()
-            },
-            receive_token_0_amount,
-            ctx.accounts.vault_0_mint.decimals,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
+    let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
+    let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
 
-        transfer_from_pool_vault_to_user(
-            ctx.accounts.authority.to_account_info(),
-            token_1_vault_safu.to_account_info(),
-            ctx.accounts.token_1_account.to_account_info(),
-            ctx.accounts.vault_1_mint.to_account_info(),
-            if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
-                ctx.accounts.token_program.to_account_info()
-            } else {
-                ctx.accounts.token_program_2022.to_account_info()
-            },
-            receive_token_1_amount,
-            ctx.accounts.vault_1_mint.decimals,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
-        pool_state.recent_epoch = Clock::get()?.epoch;
-    } else {
-        let (total_token_0_amount, total_token_1_amount) = pool_state.vault_amount_without_fee(
-            ctx.accounts.token_0_vault_safu.amount,
-            ctx.accounts.token_1_vault_safu.amount,
-        );
-        let results = CurveCalculator::lp_tokens_to_trading_tokens(
-            u128::from(lp_token_amount),
-            u128::from(pool_state.lp_supply),
-            u128::from(total_token_0_amount),
-            u128::from(total_token_1_amount),
-            RoundDirection::Floor,
-        )
-        .ok_or(ErrorCode::ZeroTradingTokens)?;
-
-        let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
-        let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
-        let (receive_token_0_amount, _token_0_transfer_fee) = {
-            let transfer_fee =
-                get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
-            (
-                token_0_amount.checked_sub(transfer_fee).unwrap(),
-                transfer_fee,
-            )
-        };
-
-        let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
-        let token_1_amount = std::cmp::min(total_token_1_amount, token_1_amount);
-        let (receive_token_1_amount, _token_1_transfer_fee) = {
-            let transfer_fee =
-                get_transfer_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
-            (
-                token_1_amount.checked_sub(transfer_fee).unwrap(),
-                transfer_fee,
-            )
-        };
-
-        #[cfg(feature = "enable-log")]
-        msg!(
-        "results.token_0_amount;{}, results.token_1_amount:{},receive_token_0_amount:{},token_0_transfer_fee:{},
-            receive_token_1_amount:{},token_1_transfer_fee:{}",
-        results.token_0_amount,
-        results.token_1_amount,
-        receive_token_0_amount,
-        token_0_transfer_fee,
-        receive_token_1_amount,
-        token_1_transfer_fee
-    );
-        if receive_token_0_amount < minimum_token_0_amount
-            || receive_token_1_amount < minimum_token_1_amount
-        {
-            return Err(ErrorCode::ExceededSlippage.into());
-        }
-        pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
-        token_burn(
-            ctx.accounts.owner.to_account_info(),
-            ctx.accounts.token_program.to_account_info(),
-            ctx.accounts.lp_mint.to_account_info(),
-            ctx.accounts.owner_lp_token.to_account_info(),
-            lp_token_amount as u64,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
-
-        let mut amm = pool_state.amm;
-        transfer_from_pool_vault_to_user(
-            ctx.accounts.authority.to_account_info(),
-            ctx.accounts.token_0_vault.to_account_info(),
-            ctx.accounts.token_0_account.to_account_info(),
-            ctx.accounts.vault_0_mint.to_account_info(),
-            if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
-                ctx.accounts.token_program.to_account_info()
-            } else {
-                ctx.accounts.token_program_2022.to_account_info()
-            },
-            amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * receive_token_0_amount,
-            ctx.accounts.vault_0_mint.decimals,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
-
-        transfer_from_pool_vault_to_user(
-            ctx.accounts.authority.to_account_info(),
-            ctx.accounts.token_1_vault.to_account_info(),
-            ctx.accounts.token_1_account.to_account_info(),
-            ctx.accounts.vault_1_mint.to_account_info(),
-            if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
-                ctx.accounts.token_program.to_account_info()
-            } else {
-                ctx.accounts.token_program_2022.to_account_info()
-            },
-            amm.get_buy_price(lp_token_amount.into()).unwrap() as u64 * receive_token_1_amount,
-            ctx.accounts.vault_1_mint.decimals,
-            &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
-        )?;
-        amm.apply_sell(lp_token_amount.into()).unwrap();
-        pool_state.recent_epoch = Clock::get()?.epoch;
-
-        pool_state.amm = amm;
+    let mut amm = pool_state.amm;
+    if amm.virtual_token_reserves > DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE {
+        amm.update(ctx.accounts.lp_mint.supply.into())?;
     }
+
+    let liquidity = U128::from(token_0_amount)
+        .checked_mul(U128::from(token_1_amount))
+        .unwrap()
+        .integer_sqrt()
+        .as_u64();
+
+    let sell_result = amm.apply_sell(liquidity.into()).unwrap();
+    msg!("liquidity: {}", liquidity);
+    msg!("sell_result: {:?}", sell_result);
+
+    // Calculate the cost ratio based on sol_amount to liquidity
+    let return_ratio = sell_result.sol_amount as f64 / liquidity as f64;
+
+    msg!("Cost ratio: {}", return_ratio);
+
+    // Apply the return ratio to both token amounts
+    let token_0_amount = (token_0_amount as f64 * return_ratio).floor() as u64;
+    let token_1_amount = (token_1_amount as f64 * return_ratio).floor() as u64;
+
+    msg!("Adjusted amount 0: {}", token_0_amount);
+    msg!("Adjusted amount 1: {}", token_1_amount);
+
+    // The LP tokens to burn is the token_amount from sell_result
+    let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
+    let (receive_token_0_amount, token_0_transfer_fee) = {
+        let transfer_fee = get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
+        (
+            token_0_amount.checked_sub(transfer_fee).unwrap(),
+            transfer_fee,
+        )
+    };
+
+    let token_1_amount = std::cmp::min(total_token_1_amount, token_1_amount);
+    let (receive_token_1_amount, token_1_transfer_fee) = {
+        let transfer_fee = get_transfer_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
+        (
+            token_1_amount.checked_sub(transfer_fee).unwrap(),
+            transfer_fee,
+        )
+    };
+
+    #[cfg(feature = "enable-log")]
+    msg!(
+        "results.token_0_amount:{}, results.token_1_amount:{}, receive_token_0_amount:{}, token_0_transfer_fee:{},
+        receive_token_1_amount:{}, token_1_transfer_fee:{}, lp_tokens_to_burn:{}",
+        results.token_0_amount,
+        results.token_1_amount,
+        receive_token_0_amount,
+        token_0_transfer_fee,
+        receive_token_1_amount,
+        token_1_transfer_fee,
+        lp_tokens_to_burn
+    );
+
+    if receive_token_0_amount < minimum_token_0_amount
+        || receive_token_1_amount < minimum_token_1_amount
+    {
+        return Err(ErrorCode::ExceededSlippage.into());
+    }
+
+    token_burn(
+        ctx.accounts.owner.to_account_info(),
+        ctx.accounts.token_program.to_account_info(),
+        ctx.accounts.lp_mint.to_account_info(),
+        ctx.accounts.owner_lp_token.to_account_info(),
+        lp_token_amount,
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
+    )?;
+    pool_state.lp_supply = ctx.accounts.lp_mint.supply;
+
+    transfer_from_pool_vault_to_user(
+        ctx.accounts.authority.to_account_info(),
+        ctx.accounts.token_0_vault.to_account_info(),
+        ctx.accounts.token_0_account.to_account_info(),
+        ctx.accounts.vault_0_mint.to_account_info(),
+        if ctx.accounts.vault_0_mint.to_account_info().owner == ctx.accounts.token_program.key {
+            ctx.accounts.token_program.to_account_info()
+        } else {
+            ctx.accounts.token_program_2022.to_account_info()
+        },
+        token_0_amount,
+        ctx.accounts.vault_0_mint.decimals,
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
+    )?;
+
+    transfer_from_pool_vault_to_user(
+        ctx.accounts.authority.to_account_info(),
+        ctx.accounts.token_1_vault.to_account_info(),
+        ctx.accounts.token_1_account.to_account_info(),
+        ctx.accounts.vault_1_mint.to_account_info(),
+        if ctx.accounts.vault_1_mint.to_account_info().owner == ctx.accounts.token_program.key {
+            ctx.accounts.token_program.to_account_info()
+        } else {
+            ctx.accounts.token_program_2022.to_account_info()
+        },
+        token_1_amount,
+        ctx.accounts.vault_1_mint.decimals,
+        &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
+    )?;
+
+    pool_state.amm = amm;
+    pool_state.lp_supply = ctx.accounts.lp_mint.supply;
+    pool_state.recent_epoch = Clock::get()?.epoch;
+
     Ok(())
 }

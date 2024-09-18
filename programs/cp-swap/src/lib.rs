@@ -31,14 +31,6 @@ pub mod admin {
     declare_id!("99VXriv7RXJSypeJDBQtGRsak1n5o2NBzbtMXhHW2RNG");
 }
 
-pub mod create_pool_fee_reveiver {
-    use anchor_lang::prelude::declare_id;
-    #[cfg(feature = "devnet")]
-    declare_id!("G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2");
-    #[cfg(not(feature = "devnet"))]
-    declare_id!("Cja56QjuKWUDywtqoGrwfebiF3UjpmYT9KS4FbhXgDkw");
-}
-
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
 
 #[program]
@@ -153,11 +145,11 @@ pub mod raydium_cp_swap {
     ///
     pub fn initialize_metadata(
         ctx: Context<InitializeMetadata>,
-        _name: String,
-        _symbol: String,
-        _uri: String,
+        name: String,
+        symbol: String,
+        uri: String,
     ) -> Result<()> {
-        instructions::initialize_metadata(ctx)
+        instructions::initialize_metadata(ctx, name, symbol, uri)
     }
 
     /// Creates a pool for the given token pair and the initial price
