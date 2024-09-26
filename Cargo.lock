@@ -3456,7 +3456,7 @@ dependencies = [
 
 [[package]]
 name = "raydium-cp-swap"
-version = "0.1.1391"
+version = "0.1.1392"
 dependencies = [
  "anchor-lang",
  "anchor-spl",

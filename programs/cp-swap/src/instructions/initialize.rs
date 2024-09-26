@@ -1,9 +1,10 @@
 use crate::curve::CurveCalculator;
 use crate::curve::AMM;
-use crate::curve::DEFAULT_INITIAL_VIRTUAL_SOL_RESERVE;
-use crate::curve::DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE;
-use crate::curve::DEFAULT_SOL_BALANCE;
-use crate::curve::DEFAULT_TOKEN_BALANCE;
+use crate::curve::DEFAULT_VIRTUAL_SOL_RESERVE;
+use crate::curve::DEFUALT_VIRTUAL_TOKEN_RESERVE;
+use crate::curve::DEFAULT_TOKEN_RESERVES;
+use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
+use crate::curve::DEFAULT_FEE_BASIS_POINTS;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
@@ -33,7 +34,6 @@ use std::ops::Deref;
 pub struct Initialize<'info> {
     #[account(
         mut,
-        constraint = creator.key() == amm_config.fund_owner 
     )]
     pub creator: Signer<'info>,
     /// Which config the pool belongs to.
@@ -153,6 +153,8 @@ pub struct Initialize<'info> {
     pub rent: Sysvar<'info, Rent>,
     /// CHECK: This is not dangerous because we don't read or write from this account
     pub observation_state: UncheckedAccount<'info>,
+
+    pub winna_winna_chickum_dinna: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -307,38 +309,13 @@ pub fn initialize(
     )?;
     let pool_state = &mut pool_state_loader.load_init()?;
     
-    let mut amm = AMM::new(
-        DEFAULT_INITIAL_VIRTUAL_SOL_RESERVE,
-        DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE,
-        DEFAULT_SOL_BALANCE,
-        10u128.pow(9u32), // 1 USDC/USDT
-        DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE,
+    let amm = AMM::new(
+        DEFAULT_VIRTUAL_SOL_RESERVE,
+        DEFUALT_VIRTUAL_TOKEN_RESERVE,
+        DEFAULT_TOKEN_RESERVES,
+        DEFAULT_TOKEN_RESERVES,
+        DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE,
     );
-
-    let liquidity = U128::from(init_amount_0)
-        .checked_mul(U128::from(init_amount_1))
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
-    let buy_result = amm.apply_buy(liquidity.into()).unwrap();
-    msg!("liquidity: {}", liquidity);
-    msg!("buy_result: {:?}", buy_result);
-
-    // Calculate the cost ratio based on sol_amount to liquidity
-    let cost_ratio = buy_result.sol_amount as f64 / liquidity as f64;
-
-    msg!("Cost ratio: {}", cost_ratio);
-
-    // Apply the cost ratio to both token amounts
-    let init_amount_0 = (init_amount_0 as f64 * cost_ratio).ceil() as u64;
-    let init_amount_1 = (init_amount_1 as f64 * cost_ratio).ceil() as u64;
-
-    msg!("Adjusted amount 0: {}", init_amount_0);
-    msg!("Adjusted amount 1: {}", init_amount_1);
-
-    // The LP tokens to mint is the token_amount from buy_result
-    let lp_token_amount = buy_result.token_amount;
-  
     transfer_from_user_to_pool_vault(
         ctx.accounts.creator.to_account_info(),
         ctx.accounts.creator_token_0.to_account_info(),
@@ -386,8 +363,6 @@ pub fn initialize(
         .integer_sqrt()
         .as_u64();
     let lock_lp_amount = 100;
-  
-
     msg!(
         "liquidity:{}, lock_lp_amount:{}, vault_0_amount:{},vault_1_amount:{}",
         liquidity,
@@ -400,16 +375,16 @@ pub fn initialize(
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.lp_mint.to_account_info(),
         ctx.accounts.creator_lp_token.to_account_info(),
-        lp_token_amount.checked_sub(lock_lp_amount)
+        liquidity
+            .checked_sub(lock_lp_amount)
             .ok_or(ErrorCode::InitLpAmountTooLess)?,
         &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
     )?;
-
     pool_state.initialize(
         ctx.bumps.authority,
         liquidity,
         open_time,
-        ctx.accounts.creator.key(),
+        ctx.accounts.winna_winna_chickum_dinna.key(),
         ctx.accounts.amm_config.key(),
         ctx.accounts.token_0_vault.key(),
         ctx.accounts.token_1_vault.key(),

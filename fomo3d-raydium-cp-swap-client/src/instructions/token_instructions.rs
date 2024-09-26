@@ -83,7 +83,7 @@ pub fn create_ata_token_account_instr(
     let instructions = program
         .request()
         .instruction(
-            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            spl_associated_token_account::instruction::create_associated_token_account(
                 &program.payer(),
                 owner,
                 mint,

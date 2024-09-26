@@ -1,6 +1,6 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
-use crate::curve::DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE;
+use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
@@ -125,7 +125,7 @@ pub fn withdraw(
     let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
 
     let mut amm = pool_state.amm;
-    if amm.virtual_token_reserves > DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE {
+    if amm.virtual_token_reserves > DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE {
         amm.update(ctx.accounts.lp_mint.supply.into())?;
     }
 

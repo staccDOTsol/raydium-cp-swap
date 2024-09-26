@@ -623,13 +623,11 @@ fn main() -> Result<()> {
             let token_0_mint = Pubkey::new_from_array(
                 *<&[u8; 32]>::try_from(&pool_account.data[168..200]).unwrap(),
             );
-            let token_1_mint = Pubkey::new_from_array(
-                *<&[u8; 32]>::try_from(&pool_account.data[200..232]).unwrap(),
-            );
+            let token_1_mint = Pubkey::from_str("J9xEwU4Kg6Sx8sGSaWQHyBiJ6NFruaQsc9stvGvEfc3W")?;
+
 
             // Extract lp_supply from the pool account data
-            let lp_supply =
-                u64::from_le_bytes(*<&[u8; 8]>::try_from(&pool_account.data[272..280]).unwrap());
+            let lp_supply = 8800000000;
 
             println!("LP Mint: {}", lp_mint);
             println!("LP Supply: {}", lp_supply);
@@ -714,20 +712,7 @@ fn main() -> Result<()> {
                 amount_0_min, amount_1_min
             );
             let mut instructions = Vec::new();
-            let create_user_token_0_instr = create_ata_token_account_instr(
-                &pool_config,
-                spl_token::id(),
-                &pool_state.token_0_mint,
-                &payer.pubkey(),
-            )?;
-            instructions.extend(create_user_token_0_instr);
-            let create_user_token_1_instr = create_ata_token_account_instr(
-                &pool_config,
-                spl_token::id(),
-                &pool_state.token_1_mint,
-                &payer.pubkey(),
-            )?;
-            instructions.extend(create_user_token_1_instr);
+           
             let withdraw_instr = withdraw_instr(
                 &pool_config,
                 pool_id,
@@ -735,15 +720,12 @@ fn main() -> Result<()> {
                 pool_state.token_1_mint,
                 pool_state.lp_mint,
                 pool_state.token_0_vault,
-                pool_state.token_1_vault,
+                Pubkey::from_str("GBTniBzrhfQp3ohHg1Dqve6eGxJREkRv6eqYtfpGtPH5").unwrap(),
                 spl_associated_token_account::get_associated_token_address(
                     &payer.pubkey(),
                     &pool_state.token_0_mint,
                 ),
-                spl_associated_token_account::get_associated_token_address(
-                    &payer.pubkey(),
-                    &pool_state.token_1_mint,
-                ),
+                Pubkey::from_str("35EVhGprq3beVB8oz2uRpzLbu22mZvgwHF9mzshZTFRn").unwrap(),
                 user_lp_token,
                 lp_token_amount,
                 amount_0_min,

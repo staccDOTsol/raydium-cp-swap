@@ -1,6 +1,6 @@
 [package]
 name = "raydium-cp-swap"
-version = "0.1.1391"
+version = "0.1.1392"
 description = "Created with Anchor"
 edition = "2021"
 license = "MIT"

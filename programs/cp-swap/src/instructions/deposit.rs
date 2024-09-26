@@ -1,6 +1,6 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
-use crate::curve::DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE;
+use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
@@ -131,7 +131,7 @@ pub fn deposit(
     };
 
     let mut amm = pool_state.amm;
-    if amm.virtual_token_reserves > DEFAULT_INITIAL_VIRTUAL_TOKEN_RESERVE {
+    if amm.virtual_token_reserves > DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE {
         amm.update(ctx.accounts.lp_mint.supply.into())?;
     }
     let liquidity = U128::from(transfer_token_0_amount)
@@ -140,7 +140,7 @@ pub fn deposit(
         .integer_sqrt()
         .as_u64();
 
-    let buy_result = amm.apply_buy(liquidity.into()).unwrap();
+    let buy_result = amm.apply_buy(lp_token_amount.into()).unwrap();
     msg!("liquidity: {}", liquidity);
     msg!("buy_result: {:?}", buy_result);
 
