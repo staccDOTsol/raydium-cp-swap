@@ -103,7 +103,7 @@ pub fn deposit(
     );
     let results = CurveCalculator::lp_tokens_to_trading_tokens(
         u128::from(lp_token_amount),
-        u128::from(ctx.accounts.lp_mint.supply),
+        u128::from(pool_state.lp_supply),
         u128::from(total_token_0_amount),
         u128::from(total_token_1_amount),
         RoundDirection::Ceiling,
@@ -209,7 +209,7 @@ pub fn deposit(
         lp_token_amount,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-    pool_state.lp_supply = ctx.accounts.lp_mint.supply;
+    pool_state.lp_supply += lp_token_amount;
     pool_state.recent_epoch = Clock::get()?.epoch;
     pool_state.amm = amm;
 

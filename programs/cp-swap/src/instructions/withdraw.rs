@@ -194,7 +194,6 @@ pub fn withdraw(
         lp_token_amount,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-    pool_state.lp_supply = ctx.accounts.lp_mint.supply;
 
     transfer_from_pool_vault_to_user(
         ctx.accounts.authority.to_account_info(),
@@ -227,7 +226,7 @@ pub fn withdraw(
     )?;
 
     pool_state.amm = amm;
-    pool_state.lp_supply = ctx.accounts.lp_mint.supply;
+    pool_state.lp_supply -= lp_token_amount;
     pool_state.recent_epoch = Clock::get()?.epoch;
 
     Ok(())
