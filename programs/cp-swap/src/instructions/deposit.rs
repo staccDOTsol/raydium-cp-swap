@@ -131,9 +131,7 @@ pub fn deposit(
     };
 
     let mut amm = pool_state.amm;
-    if amm.virtual_token_reserves > DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE {
-        amm.update(ctx.accounts.lp_mint.supply.into())?;
-    }
+    
     let liquidity = U128::from(transfer_token_0_amount)
         .checked_mul(U128::from(transfer_token_1_amount))
         .unwrap()

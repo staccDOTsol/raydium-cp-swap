@@ -125,9 +125,6 @@ pub fn withdraw(
     let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
 
     let mut amm = pool_state.amm;
-    if amm.virtual_token_reserves > DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE {
-        amm.update(ctx.accounts.lp_mint.supply.into())?;
-    }
 
     let liquidity = U128::from(token_0_amount)
         .checked_mul(U128::from(token_1_amount))

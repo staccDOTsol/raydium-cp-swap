@@ -44,10 +44,6 @@ impl AMM {
             initial_virtual_token_reserves,
         }
     }
-    pub fn update(&mut self,actual_lp_supply: u128) -> Result<()> {
-        self.real_token_reserves = self.virtual_token_reserves.checked_sub(actual_lp_supply).unwrap();
-        Ok(())
-    }
     pub fn get_buy_price(&self, tokens: u128) -> Option<u128> {
         if tokens == 0 || tokens > self.virtual_token_reserves {
             return None;
