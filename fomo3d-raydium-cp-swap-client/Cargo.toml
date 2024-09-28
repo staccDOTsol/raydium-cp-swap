@@ -7,7 +7,6 @@ license = "MIT"
 description = "Client for Raydium CP Swap" # Added description field
 
 [dependencies]
-<<<<<<< HEAD
 anchor-client = "0.30.1"
 anchor-lang = "0.30.1"
 raydium-cp-swap = {version = "0.1.142", features = ["no-entrypoint"]}
@@ -21,32 +20,15 @@ spl-memo = "^3"
 spl-associated-token-account = { version = "2.2.0", features = ["no-entrypoint"]}
 spl-token-2022 = { version = "0.9.0", features = ["no-entrypoint"] }
 clap = { version = "4.1.8", features = ["derive"] }
-=======
-raydium-cp-swap = { path = "../programs/cp-swap" }
-
-solana-sdk = "1.17.4"                                                          # SOLANAanchor-client = ">=0.29.0"
-anchor-syn = ">=0.29.0"
-anchor-lang = ">=0.29.0"
-anchor-client = ">=0.29.0"
->>>>>>> 1812a38a073c0effd2275aa9f258c5d54e70ae89
 anyhow = "1.0.32"
 solana-cli-output = "1.17.4"
-solana-client = "1.17.4"
-solana-transaction-status = "1.17.4"
-solana-account-decoder = "1.17.4"
 solana-program = "1.17.4"
 solana-banks-client = "1.17.4"
 solana-program-runtime = "1.17.4"
 solana-program-test = "1.17.4"
-spl-associated-token-account = { version = "2", features = ["no-entrypoint"] }
-spl-token = { version = "4", features = ["no-entrypoint"] }
-spl-token-client = { version = "0.6.0" }
-spl-token-2022 = { version = "3.0.4" }
 mpl-token-metadata = { version = "4.1.2" }
 bincode = { version = "1.3.3" }
 serde_json = { version = "1.0.78" }
 serde = { version = "1.0", features = ["derive"] }
 configparser = "3.0.0"
-clap = { version = "4.1.8", features = ["derive"] }
 arrayref = "0.3.7"
-spl-memo = "4.0.0"
