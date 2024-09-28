@@ -222,6 +222,7 @@ pub fn initialize_pool_instr(
         .request()
         .accounts(raydium_cp_accounts::Initialize {
             creator: program.payer(),
+            winna_winna_chickum_dinna: program.payer(),
             amm_config: amm_config_key,
             authority,
             pool_state: pool_account_key,
