@@ -345,7 +345,7 @@ pub fn initialize(
 
     let buy_result = amm.apply_buy(liquidity as u128);
     if buy_result.is_none() {
-        return err!(ErrorCode::InitLpAmountTooLess);
+        return err!(ErrorCode::BuyResultNone);
     }
     let buy_result = buy_result.unwrap();
     // Magick

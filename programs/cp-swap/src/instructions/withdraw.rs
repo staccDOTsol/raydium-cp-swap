@@ -142,7 +142,7 @@ pub fn withdraw(
     let mut amm = pool_state.amm;
     let sell_result = amm.apply_sell(lp_token_amount as u128);
     if sell_result.is_none() {
-        return err!(ErrorCode::InitLpAmountTooLess);
+        return err!(ErrorCode::SellResultNone);
     }
     let sell_result = sell_result.unwrap();
     

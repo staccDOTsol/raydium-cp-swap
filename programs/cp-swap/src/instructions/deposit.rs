@@ -98,7 +98,7 @@ pub fn deposit(
     let mut amm = pool_state.amm;
     let buy_result = amm.apply_buy(lp_token_amount.into());
     if buy_result.is_none() {
-        return err!(ErrorCode::InitLpAmountTooLess);
+        return err!(ErrorCode::BuyResultNone);
     }
     let buy_result = buy_result.unwrap();
     
