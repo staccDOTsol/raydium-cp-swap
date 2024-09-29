@@ -140,7 +140,7 @@ pub fn deposit(
 
     let buy_result = amm.apply_buy(lp_token_amount.into()).unwrap();
     msg!("liquidity: {}", liquidity);
-    msg!("buy_result: {:?}", buy_result);
+    
 
     // Calculate the cost ratio based on sol_amount to liquidity
     let cost_ratio = buy_result.sol_amount as f64 / liquidity as f64;
