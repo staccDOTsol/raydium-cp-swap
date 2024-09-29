@@ -140,11 +140,15 @@ pub fn withdraw(
         )
     };
     let mut amm = pool_state.amm;
-    let buy_result = amm.apply_sell(lp_token_amount as u128).unwrap();
+    let sell_result = amm.apply_sell(lp_token_amount as u128);
+    if sell_result.is_none() {
+        return err!(ErrorCode::InitLpAmountTooLess);
+    }
+    let sell_result = sell_result.unwrap();
     
     // Magick
 
-    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+    let cost_ratio = sell_result.sol_amount as f64 / Q32 as f64;
 
     let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
     let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;

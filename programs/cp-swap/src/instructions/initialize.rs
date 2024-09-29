@@ -343,8 +343,11 @@ pub fn initialize(
         .as_u64();
 
 
-    let buy_result = amm.apply_buy(liquidity as u128).unwrap();
-    
+    let buy_result = amm.apply_buy(liquidity as u128);
+    if buy_result.is_none() {
+        return err!(ErrorCode::InitLpAmountTooLess);
+    }
+    let buy_result = buy_result.unwrap();
     // Magick
 
     let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
