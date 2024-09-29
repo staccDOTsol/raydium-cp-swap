@@ -702,6 +702,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
 name = "base64ct"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1780,12 +1786,13 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "fomo3d-raydium-cp-swap-client"
-version = "0.1.142"
+version = "0.1.422"
 dependencies = [
  "anchor-client",
  "anchor-lang",
  "anyhow",
  "arrayref",
+ "base64 0.22.1",
  "bincode",
  "clap 4.5.18",
  "configparser",
@@ -1809,6 +1816,7 @@ dependencies = [
  "spl-token 3.5.0",
  "spl-token-2022 0.9.0",
  "spl-token-client",
+ "tokio",
 ]
 
 [[package]]

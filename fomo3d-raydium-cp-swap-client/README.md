@@ -1,3 +1,11 @@
+re: multiswap
+
+just use it for arbs
+
+it won't work for much else
+
+cargo run multiswap EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v 1000000
+
 # Fomo3D Raydium CP Swap Client
 
 This README provides instructions on how to set up and use the Fomo3D Raydium CP Swap Client.
