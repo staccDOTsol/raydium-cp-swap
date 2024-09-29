@@ -1,6 +1,6 @@
 [package]
 name = "fomo3d-raydium-cp-swap-client"
-version = "0.1.142"
+version = "0.1.422"
 rust-version = "1.75.0"
 edition = "2021"
 license = "MIT"
@@ -11,7 +11,7 @@ anchor-client = "0.30.1"
 anchor-lang = "0.30.1"
 raydium-cp-swap = {version = "0.1.142", features = ["no-entrypoint"]}
 solana-sdk = ">=1.14, < 1.19"
-solana-client = ">=1.14, < 1.19"
+solana-client = ">=1.18, < 1.19"
 solana-account-decoder = ">=1.14, < 1.19"
 solana-transaction-status = ">=1.14, < 1.19"
 spl-token = { version = "^3", features=["no-entrypoint"] }
@@ -32,3 +32,6 @@ serde_json = { version = "1.0.78" }
 serde = { version = "1.0", features = ["derive"] }
 configparser = "3.0.0"
 arrayref = "0.3.7"
+base64 = "0.22.1"
+rand = "0.8.5"
+tokio = "1.40.0"

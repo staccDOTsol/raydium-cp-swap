@@ -423,7 +423,7 @@ pub fn swap_base_input_instr(
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
 
-    let mut instructions = program
+    let instructions = program
         .request()
         .accounts(raydium_cp_accounts::Swap {
             payer: program.payer(),
@@ -446,10 +446,6 @@ pub fn swap_base_input_instr(
         })
         .instructions()?;
 
-    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_limit(1_400_000);
-    instructions.insert(0, compute_budget_ix);
-    let compute_budget_ix = ComputeBudgetInstruction::set_compute_unit_price(3333333);
-    instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
 
