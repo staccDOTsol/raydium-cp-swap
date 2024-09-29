@@ -131,7 +131,7 @@ pub fn deposit(
     };
 
     let mut amm = pool_state.amm;
-    
+
     let liquidity = U128::from(transfer_token_0_amount)
         .checked_mul(U128::from(transfer_token_1_amount))
         .unwrap()
@@ -146,7 +146,6 @@ pub fn deposit(
     let cost_ratio = buy_result.sol_amount as f64 / liquidity as f64;
 
     msg!("Cost ratio: {}", cost_ratio);
-
 
     // Apply the cost ratio to both token amounts
     let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;

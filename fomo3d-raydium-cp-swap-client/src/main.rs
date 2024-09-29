@@ -1237,7 +1237,6 @@ fn main() -> Result<()> {
             );
             let token_1_mint = Pubkey::from_str("J9xEwU4Kg6Sx8sGSaWQHyBiJ6NFruaQsc9stvGvEfc3W")?;
 
-
             // Extract lp_supply from the pool account data
             let lp_supply = 8800000000;
 
@@ -1324,7 +1323,7 @@ fn main() -> Result<()> {
                 amount_0_min, amount_1_min
             );
             let mut instructions = Vec::new();
-           
+
             let withdraw_instr = withdraw_instr(
                 &pool_config,
                 pool_id,

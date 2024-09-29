@@ -1851,6 +1851,7 @@ dependencies = [
  "solana-program",
  "solana-program-runtime",
  "solana-program-test",
+ "solana-rpc-client-api",
  "solana-sdk",
  "solana-transaction-status",
  "spl-associated-token-account 2.3.0",
