@@ -1,10 +1,11 @@
 use crate::states::*;
 use anchor_lang::prelude::*;
+use crate::error::ErrorCode;
 
 #[derive(Accounts)]
 pub struct UpdatePoolStatus<'info> {
     #[account(
-        address = crate::admin::id()
+        address = pool_state.load()?.pool_creator @ ErrorCode::InvalidOwner
     )]
     pub authority: Signer<'info>,
 

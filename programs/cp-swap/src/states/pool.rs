@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::Mint;
 use std::ops::{BitAnd, BitOr, BitXor};
+
+use crate::curve::AMM;
 /// Seed to derive account address and signature
 pub const POOL_SEED: &str = "pool";
 pub const POOL_LP_MINT_SEED: &str = "pool_lp_mint";
@@ -74,8 +76,10 @@ pub struct PoolState {
     pub open_time: u64,
     /// recent epoch
     pub recent_epoch: u64,
-    /// padding for future updates
-    pub padding: [u64; 31],
+    
+    pub amm: AMM,
+    
+    pub padding: [u64; 31 ],
 }
 
 impl PoolState {

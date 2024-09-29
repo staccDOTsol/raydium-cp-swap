@@ -311,7 +311,7 @@ pub fn handle_program_instruction(
             let ix = decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data).unwrap();
             #[derive(Debug)]
             pub struct CreateAmmConfig {
-                pub index: u16,
+                pub index: u64,
                 pub trade_fee_rate: u64,
                 pub protocol_fee_rate: u64,
                 pub fund_fee_rate: u64,

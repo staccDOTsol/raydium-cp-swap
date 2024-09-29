@@ -4,7 +4,6 @@ pub mod instructions;
 pub mod states;
 pub mod utils;
 
-use crate::curve::fees::FEE_RATE_DENOMINATOR_VALUE;
 use anchor_lang::prelude::*;
 use instructions::*;
 
@@ -57,16 +56,12 @@ pub mod raydium_cp_swap {
     ///
     pub fn create_amm_config(
         ctx: Context<CreateAmmConfig>,
-        index: u16,
+        index: u64,
         trade_fee_rate: u64,
         protocol_fee_rate: u64,
         fund_fee_rate: u64,
         create_pool_fee: u64,
     ) -> Result<()> {
-        assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
-        assert!(protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
-        assert!(fund_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
-        assert!(fund_fee_rate + protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
         instructions::create_amm_config(
             ctx,
             index,

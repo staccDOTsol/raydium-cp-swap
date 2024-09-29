@@ -1,13 +1,22 @@
 use crate::curve::CurveCalculator;
+use crate::curve::AMM;
+use crate::curve::DEFAULT_TOKEN_RESERVES;
+use crate::curve::DEFAULT_VIRTUAL_SOL_RESERVE;
+use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
+use crate::curve::DEFUALT_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
 use anchor_lang::{
     accounts::interface_account::InterfaceAccount,
     prelude::*,
-    solana_program::{clock, program::invoke, system_instruction},
+    solana_program::clock,
     system_program,
 };
+use anchor_spl::metadata::create_metadata_accounts_v3;
+use anchor_spl::metadata::mpl_token_metadata::types::DataV2;
+use anchor_spl::metadata::CreateMetadataAccountsV3;
+use anchor_spl::metadata::Metadata;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::Token,
@@ -157,8 +166,105 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
     /// Sysvar for program account
     pub rent: Sysvar<'info, Rent>,
+    /// CHECK: This is not dangerous because we don't read or write from this account
+    pub winna_winna_chickum_dinna: AccountInfo<'info>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeMetadata<'info> {
+    #[account(
+        mut,
+        constraint = creator.key() == amm_config.fund_owner 
+    )]
+    pub creator: Signer<'info>,
+    /// CHECK: This is not dangerous because we don't read or write from this account
+    /// CHECK: pool vault and lp mint authority
+    #[account(
+    seeds = [
+        crate::AUTH_SEED.as_bytes(),
+    ],
+    bump,
+)]
+    pub authority: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub lp_mint: Box<InterfaceAccount<'info, Mint>>,
+    pub token_metadata_program: Program<'info, Metadata>,
+    #[account(
+        mut,
+        seeds = [
+            b"metadata", 
+            token_metadata_program.key.as_ref(), 
+            lp_mint.to_account_info().key.as_ref()
+        ],
+        seeds::program = token_metadata_program.key(),
+        bump,
+    )]
+    /// CHECK: metadata
+    pub metadata: AccountInfo<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
+    /// AMM config account, used to verify the creator
+    pub amm_config: Account<'info, AmmConfig>,
+
+    /// an account to store oracle observations
+    #[account(
+        init,
+        seeds = [
+            OBSERVATION_SEED.as_bytes(),
+            pool_state.key().as_ref(),
+        ],
+        bump,
+        payer = creator,
+        space = ObservationState::LEN
+    )]
+    pub observation_state: AccountLoader<'info, ObservationState>,
+    /// The pool state account
+    #[account(mut)]
+    pub pool_state: AccountLoader<'info, PoolState>,
+}
+
+pub fn initialize_metadata(
+    ctx: Context<InitializeMetadata>,
+    name: String,
+    symbol: String,
+    uri: String,
+) -> Result<()> {
+
+    let name = name.to_string();
+    let symbol = symbol.to_string();
+    let uri = uri.to_string();
+
+    let seeds = &[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]];
+    let signer = [&seeds[..]];
+ 
+
+    let token_data: DataV2 = DataV2 {
+        name: name.clone(),
+        symbol: symbol.clone(),
+        uri: uri.clone(),
+        seller_fee_basis_points: 0,
+        creators: None,
+        collection: None,
+        uses: None,
+    };
+
+    let metadata_ctx = CpiContext::new_with_signer(
+        ctx.accounts.token_metadata_program.to_account_info(),
+        CreateMetadataAccountsV3 {
+            payer: ctx.accounts.creator.to_account_info(),
+            update_authority: ctx.accounts.authority.to_account_info(),
+            mint: ctx.accounts.lp_mint.to_account_info(),
+            metadata: ctx.accounts.metadata.to_account_info(),
+            mint_authority: ctx.accounts.authority.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+            rent: ctx.accounts.rent.to_account_info(),
+        },
+        &signer,
+    );
+
+    create_metadata_accounts_v3(metadata_ctx, token_data, false, true, None)?;
+    Ok(())
+}
 pub fn initialize(
     ctx: Context<Initialize>,
     init_amount_0: u64,
@@ -221,6 +327,34 @@ pub fn initialize(
 
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
+
+    let mut amm = AMM::new(
+        DEFAULT_VIRTUAL_SOL_RESERVE,
+        DEFUALT_VIRTUAL_TOKEN_RESERVE,
+        0,
+        DEFAULT_TOKEN_RESERVES,
+        DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE,
+    );
+
+    let liquidity = U128::from(init_amount_0)
+        .checked_mul(U128::from(init_amount_1))
+        .unwrap()
+        .integer_sqrt()
+        .as_u64();
+
+
+    let buy_result = amm.apply_buy(liquidity as u128).unwrap();
+    
+    // Magick
+
+    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+
+    let init_amount_0 = (init_amount_0 as f64 * cost_ratio).ceil() as u64;
+    let init_amount_1 = (init_amount_1 as f64 * cost_ratio).ceil() as u64;
+    
+    pool_state.amm = amm;
+
+    
 
     transfer_from_user_to_pool_vault(
         ctx.accounts.creator.to_account_info(),
@@ -287,37 +421,11 @@ pub fn initialize(
         &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
     )?;
 
-    // Charge the fee to create a pool
-    if ctx.accounts.amm_config.create_pool_fee != 0 {
-        invoke(
-            &system_instruction::transfer(
-                ctx.accounts.creator.key,
-                &ctx.accounts.create_pool_fee.key(),
-                u64::from(ctx.accounts.amm_config.create_pool_fee),
-            ),
-            &[
-                ctx.accounts.creator.to_account_info(),
-                ctx.accounts.create_pool_fee.to_account_info(),
-                ctx.accounts.system_program.to_account_info(),
-            ],
-        )?;
-        invoke(
-            &spl_token::instruction::sync_native(
-                ctx.accounts.token_program.key,
-                &ctx.accounts.create_pool_fee.key(),
-            )?,
-            &[
-                ctx.accounts.token_program.to_account_info(),
-                ctx.accounts.create_pool_fee.to_account_info(),
-            ],
-        )?;
-    }
-
     pool_state.initialize(
         ctx.bumps.authority,
         liquidity,
         open_time,
-        ctx.accounts.creator.key(),
+        ctx.accounts.winna_winna_chickum_dinna.key(),
         ctx.accounts.amm_config.key(),
         ctx.accounts.token_0_vault.key(),
         ctx.accounts.token_1_vault.key(),

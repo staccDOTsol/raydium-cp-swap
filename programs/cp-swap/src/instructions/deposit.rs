@@ -90,8 +90,14 @@ pub fn deposit(
     maximum_token_0_amount: u64,
     maximum_token_1_amount: u64,
 ) -> Result<()> {
+
     let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
+
+
+    let mut amm = pool_state.amm;
+    let buy_result = amm.apply_buy(lp_token_amount.into()).unwrap();
+    
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit) {
         return err!(ErrorCode::NotApproved);
     }
@@ -128,6 +134,13 @@ pub fn deposit(
         )
     };
 
+    // Magick
+    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+
+    let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;
+    let transfer_token_1_amount = (transfer_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    pool_state.amm = amm;
+    
     #[cfg(feature = "enable-log")]
     msg!(
         "results.token_0_amount;{}, results.token_1_amount:{},transfer_token_0_amount:{},transfer_token_0_fee:{},

@@ -139,6 +139,19 @@ pub fn withdraw(
             transfer_fee,
         )
     };
+    let mut amm = pool_state.amm;
+    let buy_result = amm.apply_sell(lp_token_amount as u128).unwrap();
+    
+    // Magick
+
+    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+
+    let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
+    let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    
+    pool_state.amm = amm;
+    
+    
 
     #[cfg(feature = "enable-log")]
     msg!(

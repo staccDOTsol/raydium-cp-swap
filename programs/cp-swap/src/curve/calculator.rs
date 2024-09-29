@@ -1,6 +1,6 @@
 //! Swap calculations
 
-use crate::curve::{constant_product::ConstantProductCurve, fees::Fees};
+use crate::curve::constant_product::ConstantProductCurve;
 use anchor_lang::prelude::*;
 use {crate::error::ErrorCode, std::fmt::Debug};
 
@@ -66,11 +66,11 @@ pub struct SwapResult {
     /// Amount of destination token swapped
     pub destination_amount_swapped: u128,
     /// Amount of source tokens going to pool holders
-    pub trade_fee: u128,
+    pub total_fees: u128,
     /// Amount of source tokens going to protocol
     pub protocol_fee: u128,
     /// Amount of source tokens going to protocol team
-    pub fund_fee: u128,
+    pub creator_fee: u128,
 }
 
 /// Concrete struct to wrap around the trait object which performs calculation.
@@ -94,16 +94,11 @@ impl CurveCalculator {
         source_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        trade_fee_rate: u64,
-        protocol_fee_rate: u64,
-        fund_fee_rate: u64,
+        total_fees: u64,
+        protocol_fee: u64,
+        creator_fee: u64,
     ) -> Option<SwapResult> {
-        // debit the fee to calculate the amount swapped
-        let trade_fee = Fees::trading_fee(source_amount, trade_fee_rate)?;
-        let protocol_fee = Fees::protocol_fee(trade_fee, protocol_fee_rate)?;
-        let fund_fee = Fees::fund_fee(trade_fee, fund_fee_rate)?;
-
-        let source_amount_less_fees = source_amount.checked_sub(trade_fee)?;
+        let source_amount_less_fees = source_amount.checked_sub(total_fees as u128)?;
 
         let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
             source_amount_less_fees,
@@ -117,9 +112,9 @@ impl CurveCalculator {
                 .checked_sub(destination_amount_swapped)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped,
-            trade_fee,
-            protocol_fee,
-            fund_fee,
+            total_fees: total_fees as u128,
+            protocol_fee: protocol_fee as u128,
+            creator_fee: creator_fee as u128,
         })
     }
 
@@ -127,21 +122,16 @@ impl CurveCalculator {
         destinsation_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        trade_fee_rate: u64,
-        protocol_fee_rate: u64,
-        fund_fee_rate: u64,
+        total_fees: u64,
+        protocol_fee: u64,
+        creator_fee: u64,
     ) -> Option<SwapResult> {
         let source_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
             destinsation_amount,
             swap_source_amount,
             swap_destination_amount,
         );
-
-        let source_amount =
-            Fees::calculate_pre_fee_amount(source_amount_swapped, trade_fee_rate).unwrap();
-        let trade_fee = Fees::trading_fee(source_amount, trade_fee_rate)?;
-        let protocol_fee = Fees::protocol_fee(trade_fee, protocol_fee_rate)?;
-        let fund_fee = Fees::fund_fee(trade_fee, fund_fee_rate)?;
+        let source_amount = source_amount_swapped.checked_add(total_fees as u128)?;
 
         Some(SwapResult {
             new_swap_source_amount: swap_source_amount.checked_add(source_amount)?,
@@ -149,9 +139,9 @@ impl CurveCalculator {
                 .checked_sub(destinsation_amount)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped: destinsation_amount,
-            trade_fee,
-            protocol_fee,
-            fund_fee,
+            total_fees: total_fees as u128,
+            protocol_fee: protocol_fee as u128,
+            creator_fee: creator_fee as u128,
         })
     }
 

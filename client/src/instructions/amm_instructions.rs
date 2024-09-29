@@ -104,6 +104,7 @@ pub fn initialize_pool_instr(
             associated_token_program: spl_associated_token_account::id(),
             system_program: system_program::id(),
             rent: sysvar::rent::id(),
+            winna_winna_chickum_dinna: program.payer(),
         })
         .args(raydium_cp_instructions::Initialize {
             init_amount_0,

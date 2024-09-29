@@ -125,14 +125,26 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     let constant_before = u128::from(total_input_token_amount)
         .checked_mul(u128::from(total_output_token_amount))
         .unwrap();
+    let (output_token_creator_rate, output_token_lp_rate) = match trade_direction {
+        TradeDirection::ZeroForOne => (
+            ctx.accounts.amm_config.token_0_creator_rate,
+            ctx.accounts.amm_config.token_0_lp_rate,
+        ),
+        TradeDirection::OneForZero => (
+            ctx.accounts.amm_config.token_1_creator_rate,
+            ctx.accounts.amm_config.token_1_lp_rate,
+        ),
+    };
+    let total_fee = output_token_creator_rate + output_token_lp_rate;
+    let protocol_fee = total_fee / 10000 * 2;
 
     let result = CurveCalculator::swap_base_input(
         u128::from(actual_amount_in),
         u128::from(total_input_token_amount),
         u128::from(total_output_token_amount),
-        ctx.accounts.amm_config.trade_fee_rate,
-        ctx.accounts.amm_config.protocol_fee_rate,
-        ctx.accounts.amm_config.fund_fee_rate,
+        total_fee,
+        protocol_fee,
+        output_token_creator_rate
     )
     .ok_or(ErrorCode::ZeroTradingTokens)?;
 
@@ -170,7 +182,7 @@ pub fn swap_base_input(ctx: Context<Swap>, amount_in: u64, minimum_amount_out: u
     };
 
     let protocol_fee = u64::try_from(result.protocol_fee).unwrap();
-    let fund_fee = u64::try_from(result.fund_fee).unwrap();
+    let fund_fee = u64::try_from(result.creator_fee).unwrap();
 
     match trade_direction {
         TradeDirection::ZeroForOne => {
