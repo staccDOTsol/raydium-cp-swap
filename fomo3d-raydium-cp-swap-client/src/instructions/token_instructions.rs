@@ -26,7 +26,7 @@ pub fn create_and_init_mint_instr(
     extension_init_params: Vec<ExtensionInitializationParams>,
     decimals: u8,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -49,7 +49,7 @@ pub fn create_account_rent_exmpt_instr(
     owner: Pubkey,
     data_size: usize,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -75,7 +75,7 @@ pub fn create_ata_token_account_instr(
     mint: &Pubkey,
     owner: &Pubkey,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -100,7 +100,7 @@ pub fn create_and_init_auxiliary_token(
     mint: &Pubkey,
     owner: &Pubkey,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let mint_account = &mut RpcClient::new(config.http_url.to_string()).get_account(&mint)?;
     // Client.
@@ -158,7 +158,7 @@ pub fn close_token_account(
     destination: &Pubkey,
     owner: &Keypair,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -184,7 +184,7 @@ pub fn spl_token_transfer_instr(
     amount: u64,
     from_authority: &Keypair,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -212,7 +212,7 @@ pub fn spl_token_mint_to_instr(
     amount: u64,
     mint_authority: &Keypair,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -237,7 +237,7 @@ pub fn spl_token_mint_to_instr(
 }
 
 pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let wallet_key = payer.pubkey();
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let wsol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;

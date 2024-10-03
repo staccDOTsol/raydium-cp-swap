@@ -38,7 +38,14 @@ solana-rpc-client-api = "1.17.4"
 base64 = "0.22.1"
 rand = "0.8.5"
 tokio = "1.40.0"
+<<<<<<< HEAD
 bs58 = "0.5.1"
 colorful = "0.3.2"
 regex = "1.11.0"
 lazy_static = "1.5.0"
+=======
+rayon = "1.10.0"
+crossbeam-channel = "0.5.13"
+ordered-float = "4.3.0"
+cached = "0.53.1"
+>>>>>>> 467e8fca057c74f7522bd2f601b9a23207d7733b

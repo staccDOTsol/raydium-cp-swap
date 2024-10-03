@@ -30,7 +30,7 @@ pub fn collect_protocol_fee_instr(
     amount_1_requested: u64,
     amm_config: Pubkey,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -74,7 +74,7 @@ pub fn collect_fund_fee_instr(
     amount_0_requested: u64,
     amount_1_requested: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -118,7 +118,7 @@ pub fn initialize_amm_config_instr(
     token_0_lp_rate: u64,
     token_1_creator_rate: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let client = Client::new(url, Rc::new(payer));
     let program = client.program(config.raydium_cp_program)?;
@@ -165,7 +165,7 @@ pub fn initialize_pool_instr(
     lp_mint: Pubkey,
     amm_config_index: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -305,7 +305,7 @@ pub fn deposit_instr(
     maximum_token_0_amount: u64,
     maximum_token_1_amount: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -359,7 +359,7 @@ pub fn withdraw_instr(
     minimum_token_0_amount: u64,
     minimum_token_1_amount: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -415,7 +415,7 @@ pub fn swap_base_input_instr(
     amount_in: u64,
     minimum_amount_out: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
@@ -465,7 +465,7 @@ pub fn swap_base_output_instr(
     max_amount_in: u64,
     amount_out: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path)?;
+    let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
     let client = Client::new(url, Rc::new(payer));
