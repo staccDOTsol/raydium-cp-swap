@@ -1,12 +1,12 @@
 [package]
-name = "raydium-cp-swap"
+name = "raydium-cp-approval"
 version = "0.1.0"
 description = "Created with Anchor"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "raydium_cp_swap"
+name = "cp_approval"
 
 [features]
 no-entrypoint = []
@@ -25,10 +25,11 @@ spl-token = { version = "4.0.0", features = ["no-entrypoint"] }
 spl-math = { version = "0.2", features = ["no-entrypoint"] }
 spl-memo = "4.0.0"
 uint = "0.9.1"
+spl-token-2022 = { version = "*", features = ["no-entrypoint"] }
 solana-security-txt = "1.1.1"
 bytemuck = { version = "1.4.0", features = ["derive", "min_const_generics"] }
 arrayref = { version = "0.3.6" }
-num-integer = "0.1.46"
+raydium-cp-swap = { path = "../cp-swap", features = ["no-entrypoint"] }
 
 [dev-dependencies]
 quickcheck = "0.9"

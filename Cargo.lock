@@ -3201,6 +3201,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "raydium-cp-approval"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+ "anchor-spl",
+ "arrayref",
+ "bytemuck",
+ "proptest",
+ "quickcheck",
+ "rand 0.8.5",
+ "raydium-cp-swap",
+ "solana-security-txt",
+ "spl-math",
+ "spl-memo",
+ "spl-token",
+ "spl-token-2022",
+ "uint",
+]
+
+[[package]]
 name = "raydium-cp-swap"
 version = "0.1.0"
 dependencies = [
@@ -3208,6 +3228,7 @@ dependencies = [
  "anchor-spl",
  "arrayref",
  "bytemuck",
+ "num-integer",
  "proptest",
  "quickcheck",
  "rand 0.8.5",

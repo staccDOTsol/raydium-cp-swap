@@ -1,5 +1,6 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
+use crate::curve::PRICE_SCALE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
@@ -138,23 +139,31 @@ pub fn withdraw(
             token_1_amount.checked_sub(transfer_fee).unwrap(),
             transfer_fee,
         )
-    };
-    let mut amm = pool_state.amm;
-    let sell_result = amm.apply_sell(lp_token_amount as u128);
-    if sell_result.is_none() {
-        return err!(ErrorCode::SellResultNone);
+    };    let mut amm = pool_state.amm;
+    let total_lp_supply = pool_state.lp_supply;
+
+    // Calculate the proportion of the pool the user is withdrawing
+    let withdrawal_ratio = lp_token_amount as f64 / total_lp_supply as f64;
+
+    // Calculate the base amounts of tokens to withdraw based on the ratio
+    let base_withdraw_token_0 = (ctx.accounts.token_0_vault.amount as f64 * withdrawal_ratio).floor() as u64;
+    let base_withdraw_token_1 = (ctx.accounts.token_1_vault.amount as f64 * withdrawal_ratio).floor() as u64;
+
+    // Calculate the cost modifier for the withdrawal
+    let cost_modifier = amm.calculate_cost_modifier(lp_token_amount.into(), pool_state.lp_supply.into());
+    let modifier_f64 = cost_modifier as f64 / PRICE_SCALE as f64;
+
+    // Apply the cost modifier to calculate the actual withdrawal amounts
+    let receive_token_0_amount = (base_withdraw_token_0 as f64 / modifier_f64).floor() as u64;
+    let receive_token_1_amount = (base_withdraw_token_1 as f64 / modifier_f64).floor() as u64;
+
+    // Check if the received amounts meet the minimum requirements
+    if receive_token_0_amount < minimum_token_0_amount || receive_token_1_amount < minimum_token_1_amount {
+        return Err(ErrorCode::ExceededSlippage.into());
     }
-    let sell_result = sell_result.unwrap();
-    
-    // Magick
 
-    let cost_ratio = sell_result.sol_amount as f64 / Q32 as f64;
-
-    let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
-    let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;
-    
+    // Update the pool state
     pool_state.amm = amm;
-    
     
 
     #[cfg(feature = "enable-log")]
@@ -180,12 +189,6 @@ pub fn withdraw(
         change_type: 1
     });
 
-    if receive_token_0_amount < minimum_token_0_amount
-        || receive_token_1_amount < minimum_token_1_amount
-    {
-        return Err(ErrorCode::ExceededSlippage.into());
-    }
-
     pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
@@ -206,7 +209,7 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        token_0_amount,
+        receive_token_0_amount,
         ctx.accounts.vault_0_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
@@ -221,11 +224,11 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        token_1_amount,
+        receive_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
     pool_state.recent_epoch = Clock::get()?.epoch;
 
-    Ok(())
+    Ok(()) 
 }

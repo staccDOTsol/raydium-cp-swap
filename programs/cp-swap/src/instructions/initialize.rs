@@ -1,9 +1,5 @@
 use crate::curve::CurveCalculator;
 use crate::curve::AMM;
-use crate::curve::DEFAULT_TOKEN_RESERVES;
-use crate::curve::DEFAULT_VIRTUAL_SOL_RESERVE;
-use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
-use crate::curve::DEFUALT_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::*;
@@ -133,13 +129,6 @@ pub struct Initialize<'info> {
         bump,
     )]
     pub token_1_vault: UncheckedAccount<'info>,
-
-    /// create pool fee account
-    #[account(
-        mut,
-        address= crate::create_pool_fee_reveiver::id(),
-    )]
-    pub create_pool_fee: Box<InterfaceAccount<'info, TokenAccount>>,
 
     /// an account to store oracle observations
     #[account(
@@ -327,36 +316,13 @@ pub fn initialize(
 
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
-
-    let mut amm = AMM::new(
-        DEFAULT_VIRTUAL_SOL_RESERVE,
-        DEFUALT_VIRTUAL_TOKEN_RESERVE,
-        0,
-        DEFAULT_TOKEN_RESERVES,
-        DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE,
-    );
-
-    let liquidity = U128::from(init_amount_0)
-        .checked_mul(U128::from(init_amount_1))
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
-
-
-    let buy_result = amm.apply_buy(liquidity as u128);
-    if buy_result.is_none() {
-        return err!(ErrorCode::BuyResultNone);
-    }
-    let buy_result = buy_result.unwrap();
-    // Magick
-
-    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
-
-    let init_amount_0 = (init_amount_0 as f64 * cost_ratio).ceil() as u64;
-    let init_amount_1 = (init_amount_1 as f64 * cost_ratio).ceil() as u64;
     
-    pool_state.amm = amm;
+    let mut amm = AMM::default();
+    
+    let liquidity = amm.initialize(init_amount_0.into(), init_amount_1.into())   
+        .ok_or(ErrorCode::InitializationFailed)? as u64;
 
+    pool_state.amm = amm;
     
 
     transfer_from_user_to_pool_vault(
@@ -400,11 +366,6 @@ pub fn initialize(
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
-    let liquidity = U128::from(token_0_vault.amount)
-        .checked_mul(token_1_vault.amount.into())
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
     let lock_lp_amount = 100;
     msg!(
         "liquidity:{}, lock_lp_amount:{}, vault_0_amount:{},vault_1_amount:{}",

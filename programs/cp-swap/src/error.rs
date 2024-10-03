@@ -34,4 +34,12 @@ pub enum ErrorCode {
     SellResultNone,
     #[msg("Buy result is none")]
     BuyResultNone,
+    #[msg("Initialization failed")]
+    InitializationFailed,
+    #[msg("Arithmetic error occurred")]
+    ArithmeticError,
+    #[msg("Deposit operation failed")]
+    DepositFailed,
+    #[msg("Insufficient liquidity in the pool")]
+    InsufficientLiquidity,
 }

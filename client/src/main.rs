@@ -168,7 +168,6 @@ fn main() -> Result<()> {
                 token_1_program,
                 spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &mint0),
                 spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &mint1),
-                raydium_cp_swap::create_pool_fee_reveiver::id(),
                 init_amount_0,
                 init_amount_1,
                 open_time,

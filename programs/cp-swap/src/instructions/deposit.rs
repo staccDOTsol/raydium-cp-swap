@@ -1,5 +1,6 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
+use crate::curve::PRICE_SCALE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
@@ -94,14 +95,6 @@ pub fn deposit(
     let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
 
-
-    let mut amm = pool_state.amm;
-    let buy_result = amm.apply_buy(lp_token_amount.into());
-    if buy_result.is_none() {
-        return err!(ErrorCode::BuyResultNone);
-    }
-    let buy_result = buy_result.unwrap();
-    
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit) {
         return err!(ErrorCode::NotApproved);
     }
@@ -138,11 +131,23 @@ pub fn deposit(
         )
     };
 
+    let amm = pool_state.amm;
     // Magick
-    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+    let cost_modifier = amm.calculate_cost_modifier(lp_token_amount.into(), pool_state.lp_supply.into());
 
-    let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;
-    let transfer_token_1_amount = (transfer_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    // Calculate the adjusted amounts based on the cost modifier
+    let modifier_f64 = cost_modifier as f64 / PRICE_SCALE as f64;
+    let transfer_token_0_amount = (transfer_token_0_amount as f64 * modifier_f64).ceil() as u64;
+    let transfer_token_1_amount = (transfer_token_1_amount as f64 * modifier_f64).ceil() as u64;
+
+    // Ensure we're not exceeding the maximum amounts specified by the user
+    if transfer_token_0_amount > maximum_token_0_amount
+        || transfer_token_1_amount > maximum_token_1_amount
+    {
+        return Err(ErrorCode::ExceededSlippage.into());
+    }
+
+    // Update the pool state
     pool_state.amm = amm;
     
     #[cfg(feature = "enable-log")]
