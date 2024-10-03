@@ -28,7 +28,7 @@ pub mod admin {
     #[cfg(feature = "devnet")]
     declare_id!("adMCyoCgfkg7bQiJ9aBJ59H3BXLY3r5LNLfPpQfMzBe");
     #[cfg(not(feature = "devnet"))]
-    declare_id!("99VXriv7RXJSypeJDBQtGRsak1n5o2NBzbtMXhHW2RNG");
+    declare_id!("6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy");
 }
 
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
