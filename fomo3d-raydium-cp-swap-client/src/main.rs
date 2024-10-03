@@ -1,13 +1,13 @@
 #![allow(dead_code)]
 
-            // Shuffle the pools array
-            use rand::seq::SliceRandom;
+// Shuffle the pools array
 use anchor_client::{Client, Cluster};
 use anchor_lang::{AccountDeserialize, AnchorDeserialize};
 use anyhow::{format_err, Result};
 use arrayref::array_ref;
 use clap::Parser;
 use configparser::ini::Ini;
+use rand::seq::SliceRandom;
 use raydium_cp_swap::states::PoolState;
 use raydium_cp_swap::{curve::constant_product::ConstantProductCurve, states::AmmConfig};
 use solana_client::rpc_config::RpcSendTransactionConfig;
@@ -30,14 +30,28 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 mod instructions;
-use instructions::{amm_instructions::*, rpc};
 use instructions::rpc::*;
 use instructions::token_instructions::*;
 use instructions::utils::*;
+use instructions::{amm_instructions::*, rpc};
+use lazy_static::lazy_static;
 use spl_token_2022::{
     extension::StateWithExtensionsMut,
     state::{Account, Mint},
 };
+use std::sync::Mutex;
+
+lazy_static! {
+    static ref GLOBAL_AMM_INDEX: Mutex<u64> = Mutex::new(0);
+}
+
+// Helper function to get and increment the index
+fn get_and_increment_index() -> u64 {
+    let mut index = GLOBAL_AMM_INDEX.lock().unwrap();
+    let current_index = *index;
+    *index += 1;
+    current_index
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClientConfig {
@@ -96,8 +110,8 @@ pub struct Opts {
     #[clap(subcommand)]
     pub command: RaydiumCpCommands,
 }
-use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 #[derive(Debug, Parser)]
 pub enum RaydiumCpCommands {
     /// Decode transaction logs for a given transaction ID
@@ -164,8 +178,154 @@ pub enum RaydiumCpCommands {
     },
 }
 
+#[derive(Debug)]
+pub struct CreateAmmConfig {
+    pub index: u16,
+    pub trade_fee_rate: u64,
+    pub protocol_fee_rate: u64,
+    pub fund_fee_rate: u64,
+    pub create_pool_fee: u64,
+}
 
-// Define a structure for the pool edge in the graph
+#[derive(Debug)]
+pub struct UpdateAmmConfig {
+    pub param: u8,
+    pub value: u64,
+}
+
+#[derive(Debug)]
+pub struct Initialize {
+    pub token_0_mint: String,
+    pub token_1_mint: String,
+    pub init_amount_0: u64,
+    pub init_amount_1: u64,
+    pub open_time: u64,
+}
+
+#[derive(Debug)]
+pub struct UpdatePoolStatus {
+    pub status: u8,
+}
+
+#[derive(Debug)]
+pub struct CollectProtocolFee {
+    pub amount_0_requested: u64,
+    pub amount_1_requested: u64,
+}
+
+#[derive(Debug)]
+pub struct CollectFundFee {
+    pub amount_0_requested: u64,
+    pub amount_1_requested: u64,
+}
+
+#[derive(Debug)]
+pub struct Deposit {
+    pub lp_token_amount: u64,
+    pub maximum_token_0_amount: u64,
+    pub maximum_token_1_amount: u64,
+}
+
+#[derive(Debug)]
+pub struct Withdraw {
+    pub lp_token_amount: u64,
+    pub minimum_token_0_amount: u64,
+    pub minimum_token_1_amount: u64,
+}
+
+#[derive(Debug)]
+pub struct SwapBaseInput {
+    pub amount_in: u64,
+    pub minimum_amount_out: u64,
+}
+
+#[derive(Debug)]
+pub struct SwapBaseOutput {
+    pub max_amount_in: u64,
+    pub amount_out: u64,
+}
+
+impl From<CreateAmmConfig> for RaydiumCpCommands {
+    fn from(config: CreateAmmConfig) -> Self {
+        let index = get_and_increment_index(); // Use the global index here
+        RaydiumCpCommands::InitializeAmmConfig {
+            index,
+            token_0_creator_rate: config.trade_fee_rate,
+            token_1_lp_rate: config.protocol_fee_rate,
+            token_0_lp_rate: config.fund_fee_rate,
+            token_1_creator_rate: config.create_pool_fee,
+        }
+    }
+}
+
+impl From<Initialize> for RaydiumCpCommands {
+    fn from(init: Initialize) -> Self {
+        let amm_config_index = get_and_increment_index(); // Use the global index here
+        RaydiumCpCommands::InitializePool {
+            mint0: Pubkey::new_from_array(
+                bs58::decode(&init.token_0_mint)
+                    .into_vec()
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            ),
+            mint1: Pubkey::new_from_array(
+                bs58::decode(&init.token_1_mint)
+                    .into_vec()
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            ),
+            init_amount_0: init.init_amount_0,
+            init_amount_1: init.init_amount_1,
+            open_time: init.open_time,
+            symbol: String::new(),
+            uri: String::new(),
+            name: String::new(),
+            amm_config_index, // Use the global index here
+        }
+    }
+}
+
+impl From<Deposit> for RaydiumCpCommands {
+    fn from(deposit: Deposit) -> Self {
+        RaydiumCpCommands::Deposit {
+            pool_id: Pubkey::default(), // You may want to add this to the Deposit struct
+            lp_token_amount: deposit.lp_token_amount,
+        }
+    }
+}
+
+impl From<Withdraw> for RaydiumCpCommands {
+    fn from(withdraw: Withdraw) -> Self {
+        RaydiumCpCommands::Withdraw {
+            user_lp_token: Pubkey::default(), // You may want to add this to the Withdraw struct
+            pool_id: Pubkey::default(),       // You may want to add this to the Withdraw struct
+            lp_token_amount: withdraw.lp_token_amount,
+        }
+    }
+}
+
+impl From<SwapBaseInput> for RaydiumCpCommands {
+    fn from(swap: SwapBaseInput) -> Self {
+        RaydiumCpCommands::SwapBaseIn {
+            pool_id: Pubkey::default(), // You may want to add this to the SwapBaseInput struct
+            user_input_token: Pubkey::default(), // You may want to add this to the SwapBaseInput struct
+            user_input_amount: swap.amount_in,
+        }
+    }
+}
+
+impl From<SwapBaseOutput> for RaydiumCpCommands {
+    fn from(swap: SwapBaseOutput) -> Self {
+        RaydiumCpCommands::SwapBaseOut {
+            pool_id: Pubkey::default(), // You may want to add this to the SwapBaseOutput struct
+            user_input_token: Pubkey::default(), // You may want to add this to the SwapBaseOutput struct
+            amount_out_less_fee: swap.amount_out,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct PoolEdge {
     from_token: Pubkey,
@@ -323,8 +483,13 @@ fn find_best_route(
         amount_out: amount_in,
     });
 
-    while let Some(State { cost, token, path, amount_out }) = heap.pop() {
-     
+    while let Some(State {
+        cost,
+        token,
+        path,
+        amount_out,
+    }) = heap.pop()
+    {
         let mut instructions = Vec::new();
         let mut current_input_token = input_token;
         let mut current_input_amount = amount_in;
@@ -337,26 +502,32 @@ fn find_best_route(
         output_mints.dedup(); // Remove duplicates
         for output_mint in output_mints {
             let output_token_program = mint_account_owner_cache.get(&output_mint).unwrap().0;
-            let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
-                &payer.pubkey(),
-                &output_mint,
-                &output_token_program,
-            );
-        
-            if rpc_client.get_account(&user_output_token_account).is_err() {
-                let create_ata_instr = spl_associated_token_account::instruction::create_associated_token_account(
-                    &payer.pubkey(),
+            let user_output_token_account =
+                spl_associated_token_account::get_associated_token_address_with_program_id(
                     &payer.pubkey(),
                     &output_mint,
                     &output_token_program,
                 );
+
+            if rpc_client.get_account(&user_output_token_account).is_err() {
+                let create_ata_instr =
+                    spl_associated_token_account::instruction::create_associated_token_account(
+                        &payer.pubkey(),
+                        &payer.pubkey(),
+                        &output_mint,
+                        &output_token_program,
+                    );
                 // Use the helper function to avoid duplicates
                 maybe_add_instruction(&mut instructions, create_ata_instr);
             }
         }
 
         for (i, edge) in path.iter().enumerate() {
-            let pool_state = &pools.iter().find(|p| p.pubkey == edge.pool_id).unwrap().pool;
+            let pool_state = &pools
+                .iter()
+                .find(|p| p.pubkey == edge.pool_id)
+                .unwrap()
+                .pool;
             let (input_vault, output_vault) = if edge.reverse {
                 (pool_state.token_1_vault, pool_state.token_0_vault)
             } else {
@@ -372,14 +543,26 @@ fn find_best_route(
                 edge.to_token,
             )?;
 
-            let minimum_amount_out = amount_with_slippage(output_amount, pool_config.slippage, false);
+            let minimum_amount_out =
+                amount_with_slippage(output_amount, pool_config.slippage, false);
 
             prepare_swap_instruction(
                 &pool_config,
                 edge.pool_id,
                 pool_state,
-                get_associated_token_address_with_program_id(&payer.pubkey(), &current_input_token, &mint_account_owner_cache.get(&current_input_token).unwrap().0),
-                get_associated_token_address_with_program_id(&payer.pubkey(), &edge.to_token, &mint_account_owner_cache.get(&edge.to_token).unwrap().0),
+                get_associated_token_address_with_program_id(
+                    &payer.pubkey(),
+                    &current_input_token,
+                    &mint_account_owner_cache
+                        .get(&current_input_token)
+                        .unwrap()
+                        .0,
+                ),
+                get_associated_token_address_with_program_id(
+                    &payer.pubkey(),
+                    &edge.to_token,
+                    &mint_account_owner_cache.get(&edge.to_token).unwrap().0,
+                ),
                 input_vault,
                 output_vault,
                 current_input_token,
@@ -392,16 +575,23 @@ fn find_best_route(
             current_input_token = edge.to_token;
             current_input_amount = output_amount;
 
-            println!("Step {}: Swap {} {} for {} {}", 
-                i + 1, 
-                current_input_amount, 
-                current_input_token, 
-                output_amount, 
+            println!(
+                "Step {}: Swap {} {} for {} {}",
+                i + 1,
+                current_input_amount,
+                current_input_token,
+                output_amount,
                 edge.to_token
             );
         }
-        maybe_add_instruction(&mut instructions, ComputeBudgetInstruction::set_compute_unit_price(333333));
-        maybe_add_instruction(&mut instructions, ComputeBudgetInstruction::set_compute_unit_limit(1_400_000));
+        maybe_add_instruction(
+            &mut instructions,
+            ComputeBudgetInstruction::set_compute_unit_price(333333),
+        );
+        maybe_add_instruction(
+            &mut instructions,
+            ComputeBudgetInstruction::set_compute_unit_limit(1_400_000),
+        );
         println!("Total instructions: {}", instructions.len());
 
         let signers = vec![&payer];
@@ -409,19 +599,19 @@ fn find_best_route(
         // Deduplicate instructions
         let mut unique_instructions = Vec::new();
         let mut seen_instructions = HashSet::new();
-        
+
         for instruction in instructions.iter() {
             // Create a hash of the instruction
             let mut hasher = Hasher::default();
             hasher.hash(&bincode::serialize(instruction).unwrap());
             let hash = hasher.result();
-        
+
             if !seen_instructions.contains(&hash) {
                 seen_instructions.insert(hash);
                 unique_instructions.push(instruction.clone());
             }
         }
-        
+
         instructions = unique_instructions;
         let mut txn = VersionedTransaction::from(Transaction::new_signed_with_payer(
             &instructions,
@@ -444,7 +634,10 @@ fn find_best_route(
                 match err {
                     solana_sdk::transaction::TransactionError::DuplicateInstruction(index) => {
                         let needle = instructions[index as usize].clone();
-                        let last_index = instructions.iter().enumerate().rev()
+                        let last_index = instructions
+                            .iter()
+                            .enumerate()
+                            .rev()
                             .find(|(i, x)| *i != index as usize && **x == needle)
                             .map(|(i, _)| i);
                         if let Some(last_index) = last_index {
@@ -453,7 +646,7 @@ fn find_best_route(
                         } else {
                             break;
                         }
-                    },
+                    }
                     _ => {
                         break;
                     }
@@ -468,7 +661,7 @@ fn find_best_route(
             discounted_paths.push(length);
             continue;
         }
-        
+
         if token == output_token && !path.is_empty() {
             if current_input_amount > amount_in {
                 println!("Found profitable path with output amount: {} > input amount: {}, returning early.", current_input_amount, amount_in);
@@ -476,35 +669,39 @@ fn find_best_route(
             }
             continue;
             // Start of Selection
-            }
+        }
 
-            if let Some(edges) = graph.get(&token) {
-                for edge in edges {
-                    let next_amount_out = calculate_swap_output(
-                        rpc_client,
-                        &pools.iter().find(|p| p.pubkey == edge.pool_id).unwrap().pool,
-                        mint_account_owner_cache,
-                        amount_out,
-                        token,
-                        edge.to_token,
-                    )? as u64;
+        if let Some(edges) = graph.get(&token) {
+            for edge in edges {
+                let next_amount_out = calculate_swap_output(
+                    rpc_client,
+                    &pools
+                        .iter()
+                        .find(|p| p.pubkey == edge.pool_id)
+                        .unwrap()
+                        .pool,
+                    mint_account_owner_cache,
+                    amount_out,
+                    token,
+                    edge.to_token,
+                )? as u64;
 
-                    let mut new_path = path.clone();
-                    new_path.push(edge.clone());
-                    
-                    // The cost is calculated as the final output of the last leg minus the input amount
-                    let profit = next_amount_out as f64 - amount_in as f64;
-                    let cost = -profit; // Negative to create a max-heap to maximize profit
+                let mut new_path = path.clone();
+                new_path.push(edge.clone());
 
-                    heap.push(State {
-                        cost,
-                        token: edge.to_token,
-                        path: new_path,
-                        amount_out: next_amount_out,
-                    });
-                }
+                // The cost is calculated as the final output of the last leg minus the input amount
+                let profit = next_amount_out as f64 - amount_in as f64;
+                let cost = -profit; // Negative to create a max-heap to maximize profit
+
+                heap.push(State {
+                    cost,
+                    token: edge.to_token,
+                    path: new_path,
+                    amount_out: next_amount_out,
+                });
             }
         }
+    }
 
     println!("No immediate profitable route found, proceeding to find the best available route.");
 
@@ -538,9 +735,15 @@ fn calculate_swap_output(
         .map_err(|e| format_err!("Failed to deserialize AmmConfig: {}", e))?;
 
     let (input_token_creator_rate, input_token_lp_rate) = if from_token == pool.token_0_mint {
-        (amm_config_state.token_0_creator_rate, amm_config_state.token_0_lp_rate)
+        (
+            amm_config_state.token_0_creator_rate,
+            amm_config_state.token_0_lp_rate,
+        )
     } else {
-        (amm_config_state.token_1_creator_rate, amm_config_state.token_1_lp_rate)
+        (
+            amm_config_state.token_1_creator_rate,
+            amm_config_state.token_1_lp_rate,
+        )
     };
 
     // Use Raydium's CurveCalculator to compute the swap output
@@ -550,7 +753,8 @@ fn calculate_swap_output(
         u128::from(total_output_amount),
         input_token_creator_rate,
         input_token_lp_rate,
-    ).ok_or(format_err!("Swap calculation failed"))?;
+    )
+    .ok_or(format_err!("Swap calculation failed"))?;
 
     let amount_out = u64::try_from(result.destination_amount_swapped)
         .map_err(|_| format_err!("Amount out overflow"))?;
@@ -584,7 +788,7 @@ struct Pool {
     pubkey: Pubkey,
     pool: PoolState,
 }
-    use anyhow::anyhow;
+use anyhow::anyhow;
 pub fn try_deserialize_unchecked_from_bytes<T: AccountDeserialize>(data: &[u8]) -> Result<T> {
     T::try_deserialize(&mut data.as_ref())
         .map_err(|e| anyhow!("Failed to deserialize account: {}", e))
@@ -625,7 +829,6 @@ fn prepare_swap_instruction(
     minimum_amount_out: u64,
     mint_account_owner_cache: &mut HashMap<Pubkey, (Pubkey, u8)>,
     instructions: &mut Vec<Instruction>,
-    
 ) -> Result<()> {
     let input_token_program = mint_account_owner_cache.get(&input_token_mint).unwrap().0;
     let output_token_program = mint_account_owner_cache.get(&output_token_mint).unwrap().0;
@@ -666,13 +869,13 @@ fn maybe_add_instruction(instructions: &mut Vec<Instruction>, new_instruction: I
     }
 }
 fn main() -> Result<()> {
+    let opts = Opts::parse();
+    let pool_config = load_cfg(&"./client_config.ini".to_string())?;
+    let payer = read_keypair_file(&pool_config.payer_path)?;
+    let rpc_client =
+        RpcClient::new_with_commitment(pool_config.http_url.clone(), CommitmentConfig::confirmed());
+    let mut mint_account_owner_cache: HashMap<Pubkey, (Pubkey, u8)> = HashMap::new();
 
-        let opts = Opts::parse();
-        let pool_config = load_cfg(&"./client_config.ini".to_string())?;
-        let payer = read_keypair_file(&pool_config.payer_path)?;
-        let rpc_client = RpcClient::new_with_commitment(pool_config.http_url.clone(), CommitmentConfig::confirmed());
-        let mut mint_account_owner_cache: HashMap<Pubkey, (Pubkey, u8)> = HashMap::new();
-    
     match opts.command {
         RaydiumCpCommands::Multiswap {
             input_token,
@@ -706,39 +909,44 @@ fn main() -> Result<()> {
                 );
                 if let Ok(best_route) = best_route {
                     println!("Best route found with {} steps", best_route.len());
-                    
+
                     let mut instructions = Vec::new();
                     let mut current_input_token = input_token;
                     let mut current_input_amount = input_amount;
 
-                // Iterate through output mints to create ATAs if needed
-                let mut output_mints = Vec::new();
-                for edge in &best_route {
-                    output_mints.push(edge.to_token);
-                }
-                output_mints.dedup(); // Remove duplicates
-                for output_mint in output_mints {
-                    let output_token_program = mint_account_owner_cache.get(&output_mint).unwrap().0;
-                    let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
+                    // Iterate through output mints to create ATAs if needed
+                    let mut output_mints = Vec::new();
+                    for edge in &best_route {
+                        output_mints.push(edge.to_token);
+                    }
+                    output_mints.dedup(); // Remove duplicates
+                    for output_mint in output_mints {
+                        let output_token_program =
+                            mint_account_owner_cache.get(&output_mint).unwrap().0;
+                        let user_output_token_account = spl_associated_token_account::get_associated_token_address_with_program_id(
                         &payer.pubkey(),
                         &output_mint,
                         &output_token_program,
                     );
-                
-                    if rpc_client.get_account(&user_output_token_account).is_err() {
-                        let create_ata_instr = spl_associated_token_account::instruction::create_associated_token_account(
+
+                        if rpc_client.get_account(&user_output_token_account).is_err() {
+                            let create_ata_instr = spl_associated_token_account::instruction::create_associated_token_account(
                             &payer.pubkey(),
                             &payer.pubkey(),
                             &output_mint,
                             &output_token_program,
                         );
-                        // Use the helper function to avoid duplicates
-                        maybe_add_instruction(&mut instructions, create_ata_instr);
+                            // Use the helper function to avoid duplicates
+                            maybe_add_instruction(&mut instructions, create_ata_instr);
+                        }
                     }
-                }
 
                     for (i, edge) in best_route.iter().enumerate() {
-                        let pool_state = &pools.iter().find(|p| p.pubkey == edge.pool_id).unwrap().pool;
+                        let pool_state = &pools
+                            .iter()
+                            .find(|p| p.pubkey == edge.pool_id)
+                            .unwrap()
+                            .pool;
                         let (input_vault, output_vault) = if edge.reverse {
                             (pool_state.token_1_vault, pool_state.token_0_vault)
                         } else {
@@ -754,13 +962,25 @@ fn main() -> Result<()> {
                             edge.to_token,
                         )?;
 
-                        let minimum_amount_out = amount_with_slippage(output_amount, pool_config.slippage, false);
-                            prepare_swap_instruction(
+                        let minimum_amount_out =
+                            amount_with_slippage(output_amount, pool_config.slippage, false);
+                        prepare_swap_instruction(
                             &pool_config,
                             edge.pool_id,
                             pool_state,
-                            get_associated_token_address_with_program_id(&payer.pubkey(), &current_input_token, &mint_account_owner_cache.get(&current_input_token).unwrap().0),
-                            get_associated_token_address_with_program_id(&payer.pubkey(), &edge.to_token, &mint_account_owner_cache.get(&edge.to_token).unwrap().0),
+                            get_associated_token_address_with_program_id(
+                                &payer.pubkey(),
+                                &current_input_token,
+                                &mint_account_owner_cache
+                                    .get(&current_input_token)
+                                    .unwrap()
+                                    .0,
+                            ),
+                            get_associated_token_address_with_program_id(
+                                &payer.pubkey(),
+                                &edge.to_token,
+                                &mint_account_owner_cache.get(&edge.to_token).unwrap().0,
+                            ),
                             input_vault,
                             output_vault,
                             current_input_token,
@@ -774,35 +994,42 @@ fn main() -> Result<()> {
                         current_input_token = edge.to_token;
                         current_input_amount = output_amount;
 
-                        println!("Step {}: Swap {} {} for {} {}", 
-                            i + 1, 
-                            current_input_amount, 
-                            current_input_token, 
-                            output_amount, 
+                        println!(
+                            "Step {}: Swap {} {} for {} {}",
+                            i + 1,
+                            current_input_amount,
+                            current_input_token,
+                            output_amount,
                             edge.to_token
                         );
                     }
-                    maybe_add_instruction(&mut instructions, ComputeBudgetInstruction::set_compute_unit_price(333333));
-                    maybe_add_instruction(&mut instructions, ComputeBudgetInstruction::set_compute_unit_limit(1_400_000));
+                    maybe_add_instruction(
+                        &mut instructions,
+                        ComputeBudgetInstruction::set_compute_unit_price(333333),
+                    );
+                    maybe_add_instruction(
+                        &mut instructions,
+                        ComputeBudgetInstruction::set_compute_unit_limit(1_400_000),
+                    );
                     println!("Total instructions: {}", instructions.len());
 
                     let mut unique_instructions = Vec::new();
                     let mut seen_instructions = HashSet::new();
-                    
+
                     for instruction in instructions.iter() {
                         // Create a hash of the instruction
                         let mut hasher = Hasher::default();
                         hasher.hash(&bincode::serialize(instruction).unwrap());
                         let hash = hasher.result();
-                    
+
                         if !seen_instructions.contains(&hash) {
                             seen_instructions.insert(hash);
                             unique_instructions.push(instruction.clone());
                         }
                     }
-                    
+
                     instructions = unique_instructions;
-                                        println!("Total unique instructions: {}", instructions.len());
+                    println!("Total unique instructions: {}", instructions.len());
                     let signers = vec![&payer];
                     let recent_blockhash = rpc_client.get_latest_blockhash()?;
                     let mut txn = VersionedTransaction::from(Transaction::new_signed_with_payer(
@@ -822,43 +1049,51 @@ fn main() -> Result<()> {
                     loop {
                         let signers = vec![&payer];
                         let recent_blockhash = rpc_client.get_latest_blockhash()?;
-                         txn = VersionedTransaction::from(Transaction::new_signed_with_payer(
+                        txn = VersionedTransaction::from(Transaction::new_signed_with_payer(
                             &instructions,
                             Some(&payer.pubkey()),
                             &signers,
                             recent_blockhash,
                         ));
-                       
-            let simulated = rpc_client.simulate_transaction(&txn)?;
-            println!("Simulation result: {:?}", simulated);
-            if let Some(err) = simulated.value.err {
-                println!("Simulation failed with error: {:?}", err);
-                match err {
-                    solana_sdk::transaction::TransactionError::DuplicateInstruction(index) => {
-                        println!("Duplicate instruction detected at index: {}", index);
-                        let needle = instructions[index as usize].clone();
-                        let last_index = instructions.iter().enumerate().rev()
-                            .find(|(i, x)| *i != index as usize && **x == needle)
-                            .map(|(i, _)| i);
-                        if let Some(last_index) = last_index {
-                            println!("Index of last duplicate instruction: {}", last_index);
-                            instructions.remove(last_index);
-                            println!("Removed last duplicate instruction. New instruction count: {}", instructions.len());
-                            break;
+
+                        let simulated = rpc_client.simulate_transaction(&txn)?;
+                        println!("Simulation result: {:?}", simulated);
+                        if let Some(err) = simulated.value.err {
+                            println!("Simulation failed with error: {:?}", err);
+                            match err {
+                                solana_sdk::transaction::TransactionError::DuplicateInstruction(
+                                    index,
+                                ) => {
+                                    println!("Duplicate instruction detected at index: {}", index);
+                                    let needle = instructions[index as usize].clone();
+                                    let last_index = instructions
+                                        .iter()
+                                        .enumerate()
+                                        .rev()
+                                        .find(|(i, x)| *i != index as usize && **x == needle)
+                                        .map(|(i, _)| i);
+                                    if let Some(last_index) = last_index {
+                                        println!(
+                                            "Index of last duplicate instruction: {}",
+                                            last_index
+                                        );
+                                        instructions.remove(last_index);
+                                        println!("Removed last duplicate instruction. New instruction count: {}", instructions.len());
+                                        break;
+                                    } else {
+                                        println!("No other duplicate instruction found");
+                                        break;
+                                    }
+                                }
+                                _ => {
+                                    println!("Unhandled simulation error, skipping this route");
+                                    break;
+                                }
+                            }
                         } else {
-                            println!("No other duplicate instruction found");
                             break;
                         }
-                    },
-                    _ => {
-                        println!("Unhandled simulation error, skipping this route");
-                        break;
                     }
-                }
-            } else {
-                break;
-            }
-        }
                     let signature = rpc_client.send_transaction(&txn);
                     println!("Transaction signature: {:?}", signature);
                     discounted_paths.push(length);
