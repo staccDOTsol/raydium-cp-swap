@@ -2135,3 +2135,177 @@ fn main() -> Result<()> {
     }
     Ok(())
 }
+
+use serde_json::from_str;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+
+fn read_commands_from_file(file_path: &str) -> Result<Vec<RaydiumCpCommands>> {
+    let file = File::open(file_path)?;
+    let reader = BufReader::new(file);
+    let mut commands = Vec::new();
+
+    for line in reader.lines() {
+        let command: RaydiumCpCommands = from_str(&line?)?;
+        commands.push(command);
+    }
+
+    Ok(commands)
+}
+
+fn main() -> Result<()> {
+    let pool_config = load_cfg(&"./client_config.ini".to_string())?;
+    let payer = read_keypair_file(&pool_config.payer_path)?;
+    let rpc_client =
+        RpcClient::new_with_commitment(pool_config.http_url.clone(), CommitmentConfig::confirmed());
+    let mut mint_account_owner_cache: HashMap<Pubkey, (Pubkey, u8)> = HashMap::new();
+
+    let commands = read_commands_from_file("raydium_commands.json")?;
+    let mut pool_id_map: HashMap<String, Pubkey> = HashMap::new();
+
+    for command in commands {
+        match command {
+            RaydiumCpCommands::InitializeAmmConfig {
+                index,
+                token_0_creator_rate,
+                token_1_lp_rate,
+                token_0_lp_rate,
+                token_1_creator_rate,
+            } => {
+                let initialize_amm_config_instr = initialize_amm_config_instr(
+                    &pool_config,
+                    index,
+                    token_0_creator_rate,
+                    token_1_lp_rate,
+                    token_0_lp_rate,
+                    token_1_creator_rate,
+                )?;
+                let signers = vec![&payer];
+                let recent_hash = rpc_client.get_latest_blockhash()?;
+                let txn = Transaction::new_signed_with_payer(
+                    &initialize_amm_config_instr,
+                    Some(&payer.pubkey()),
+                    &signers,
+                    recent_hash,
+                );
+                let signature = send_txn(&rpc_client, &txn, true)?;
+                println!("InitializeAmmConfig signature: {}", signature);
+            }
+            RaydiumCpCommands::InitializePool {
+                mint0,
+                mint1,
+                init_amount_0,
+                init_amount_1,
+                open_time,
+                symbol,
+                uri,
+                name,
+                amm_config_index,
+            } => {
+                let (mint0, mint1, init_amount_0, init_amount_1) = if mint0 > mint1 {
+                    (mint1, mint0, init_amount_1, init_amount_0)
+                } else {
+                    (mint0, mint1, init_amount_0, init_amount_1)
+                };
+                let lp_mint = Keypair::new();
+                let initialize_pool_instr = initialize_pool_instr(
+                    &pool_config,
+                    mint0,
+                    mint1,
+                    spl_token::id(),
+                    spl_token::id(),
+                    spl_associated_token_account::get_associated_token_address(
+                        &payer.pubkey(),
+                        &mint0,
+                    ),
+                    spl_associated_token_account::get_associated_token_address(
+                        &payer.pubkey(),
+                        &mint1,
+                    ),
+                    init_amount_0,
+                    init_amount_1,
+                    open_time,
+                    symbol.clone(),
+                    uri,
+                    name,
+                    lp_mint.pubkey(),
+                    amm_config_index,
+                )?;
+                let signers = vec![&payer, &lp_mint];
+                let recent_hash = rpc_client.get_latest_blockhash()?;
+                let txn = Transaction::new_signed_with_payer(
+                    &initialize_pool_instr,
+                    Some(&payer.pubkey()),
+                    &signers,
+                    recent_hash,
+                );
+                let signature = send_txn(&rpc_client, &txn, true)?;
+                println!("InitializePool signature: {}", signature);
+
+                // Extract pool ID from the transaction logs
+                let tx_data =
+                    rpc_client.get_transaction(&signature, UiTransactionEncoding::Json)?;
+                let pool_id = extract_pool_id_from_logs(
+                    &tx_data.transaction.meta.unwrap().log_messages.unwrap(),
+                )?;
+                pool_id_map.insert(symbol, pool_id);
+            }
+            RaydiumCpCommands::Deposit {
+                pool_id,
+                lp_token_amount,
+            } => {
+                let pool_id = pool_id_map.get(&pool_id.to_string()).unwrap_or(&pool_id);
+                // Execute deposit instruction
+                // ... (existing deposit code)
+                println!("Deposit result: {}", signature);
+            }
+            RaydiumCpCommands::Withdraw {
+                user_lp_token,
+                pool_id,
+                lp_token_amount,
+            } => {
+                let pool_id = pool_id_map.get(&pool_id.to_string()).unwrap_or(&pool_id);
+                // Execute withdraw instruction
+                // ... (existing withdraw code)
+                println!("Withdraw result: {}", signature);
+            }
+            RaydiumCpCommands::SwapBaseIn {
+                pool_id,
+                user_input_token,
+                user_input_amount,
+            } => {
+                let pool_id = pool_id_map.get(&pool_id.to_string()).unwrap_or(&pool_id);
+                // Execute swap base in instruction
+                // ... (existing swap base in code)
+                println!("SwapBaseIn result: {}", signature);
+            }
+            RaydiumCpCommands::SwapBaseOut {
+                pool_id,
+                user_input_token,
+                amount_out_less_fee,
+            } => {
+                let pool_id = pool_id_map.get(&pool_id.to_string()).unwrap_or(&pool_id);
+                // Execute swap base out instruction
+                // ... (existing swap base out code)
+                println!("SwapBaseOut result: {}", signature);
+            }
+            _ => {
+                println!("Unsupported command: {:?}", command);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_pool_id_from_logs(logs: &[String]) -> Result<Pubkey> {
+    for log in logs {
+        if log.contains("Initialize pool:") {
+            let parts: Vec<&str> = log.split(':').collect();
+            if parts.len() > 1 {
+                return Ok(Pubkey::from_str(parts[1].trim())?);
+            }
+        }
+    }
+    Err(anyhow::anyhow!("Pool ID not found in transaction logs"))
+}
