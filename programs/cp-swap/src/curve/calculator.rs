@@ -65,6 +65,12 @@ pub struct SwapResult {
     pub source_amount_swapped: u128,
     /// Amount of destination token swapped
     pub destination_amount_swapped: u128,
+    /// Amount of source tokens going to pool holders
+    pub total_fees: u128,
+    /// Amount of source tokens going to protocol
+    pub protocol_fee: u128,
+    /// Amount of source tokens going to protocol team
+    pub creator_fee: u128,
 }
 
 /// Concrete struct to wrap around the trait object which performs calculation.
@@ -88,11 +94,11 @@ impl CurveCalculator {
         source_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        input_token_creator_rate: u64,
-        input_token_lp_rate: u64,
+        total_fees: u64,
+        protocol_fee: u64,
+        creator_fee: u64,
     ) -> Option<SwapResult> {
-        let source_amount_less_fees = source_amount
-            .checked_sub(input_token_creator_rate as u128 + input_token_lp_rate as u128)?;
+        let source_amount_less_fees = source_amount.checked_sub(total_fees as u128)?;
 
         let destination_amount_swapped = ConstantProductCurve::swap_base_input_without_fees(
             source_amount_less_fees,
@@ -106,6 +112,9 @@ impl CurveCalculator {
                 .checked_sub(destination_amount_swapped)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped,
+            total_fees: total_fees as u128,
+            protocol_fee: protocol_fee as u128,
+            creator_fee: creator_fee as u128,
         })
     }
 
@@ -113,17 +122,16 @@ impl CurveCalculator {
         destinsation_amount: u128,
         swap_source_amount: u128,
         swap_destination_amount: u128,
-        input_token_creator_rate: u64,
-        input_token_lp_rate: u64,
+        total_fees: u64,
+        protocol_fee: u64,
+        creator_fee: u64,
     ) -> Option<SwapResult> {
         let source_amount_swapped = ConstantProductCurve::swap_base_output_without_fees(
             destinsation_amount,
             swap_source_amount,
             swap_destination_amount,
         );
-
-        let source_amount = source_amount_swapped
-            - (input_token_creator_rate as u128 + input_token_lp_rate as u128);
+        let source_amount = source_amount_swapped.checked_add(total_fees as u128)?;
 
         Some(SwapResult {
             new_swap_source_amount: swap_source_amount.checked_add(source_amount)?,
@@ -131,6 +139,9 @@ impl CurveCalculator {
                 .checked_sub(destinsation_amount)?,
             source_amount_swapped: source_amount,
             destination_amount_swapped: destinsation_amount,
+            total_fees: total_fees as u128,
+            protocol_fee: protocol_fee as u128,
+            creator_fee: creator_fee as u128,
         })
     }
 

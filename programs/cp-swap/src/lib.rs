@@ -21,7 +21,7 @@ solana_security_txt::security_txt! {
 #[cfg(feature = "devnet")]
 declare_id!("CPMDWBwJDtYax9qW7AyRuVC19Cc4L4Vcy4n2BHAbHkCW");
 #[cfg(not(feature = "devnet"))]
-declare_id!("CVF4q3yFpyQwV8DLDiJ9Ew6FFLE1vr5ToRzsXYQTaNrj");
+declare_id!("2Ak7T2tKpg1HgjcvbEc58mMKbSDbPbLumGGacyidpqtY");
 
 pub mod admin {
     use anchor_lang::prelude::declare_id;
@@ -49,18 +49,18 @@ pub mod raydium_cp_swap {
     pub fn create_amm_config(
         ctx: Context<CreateAmmConfig>,
         index: u64,
-        token_1_lp_rate: u64,
-        token_0_lp_rate: u64,
-        token_0_creator_rate: u64,
-        token_1_creator_rate: u64,
+        trade_fee_rate: u64,
+        protocol_fee_rate: u64,
+        fund_fee_rate: u64,
+        create_pool_fee: u64,
     ) -> Result<()> {
         instructions::create_amm_config(
             ctx,
             index,
-            token_1_lp_rate,
-            token_0_lp_rate,
-            token_0_creator_rate,
-            token_1_creator_rate,
+            trade_fee_rate,
+            protocol_fee_rate,
+            fund_fee_rate,
+            create_pool_fee,
         )
     }
 
@@ -77,13 +77,20 @@ pub mod raydium_cp_swap {
     /// * `new_fund_owner`- The config's new fund owner, be set when `param` is 4
     /// * `param`- The vaule can be 0 | 1 | 2 | 3 | 4, otherwise will report a error
     ///
+    pub fn update_amm_config(ctx: Context<UpdateAmmConfig>, param: u8, value: u64) -> Result<()> {
+        instructions::update_amm_config(ctx, param, value)
+    }
 
     /// Update pool status for given vaule
     ///
     /// # Arguments
     ///
     /// * `ctx`- The context of accounts
-    /// * `status` - The v
+    /// * `status` - The vaule of status
+    ///
+    pub fn update_pool_status(ctx: Context<UpdatePoolStatus>, status: u8) -> Result<()> {
+        instructions::update_pool_status(ctx, status)
+    }
 
     /// Collect the protocol fee accrued to the pool
     ///
@@ -134,23 +141,6 @@ pub mod raydium_cp_swap {
     ) -> Result<()> {
         instructions::initialize(ctx, init_amount_0, init_amount_1, open_time)
     }
-    /// Initialize metadata for the LP token
-    ///
-    /// # Arguments
-    ///
-    /// * `ctx` - The context of accounts
-    /// * `name` - The name of the LP token
-    /// * `symbol` - The symbol of the LP token
-    /// * `uri` - The URI for the LP token metadata
-    ///
-    pub fn initialize_metadata(
-        ctx: Context<InitializeMetadata>,
-        name: String,
-        symbol: String,
-        uri: String,
-    ) -> Result<()> {
-        instructions::initialize_metadata(ctx, name, symbol, uri)
-    }
 
     /// Creates a pool for the given token pair and the initial price
     ///
@@ -161,8 +151,8 @@ pub mod raydium_cp_swap {
     /// * `maximum_token_0_amount` -  Maximum token 0 amount to deposit, prevents excessive slippage
     /// * `maximum_token_1_amount` - Maximum token 1 amount to deposit, prevents excessive slippage
     ///
-    pub fn deposit<'info>(
-        ctx: Context<'_, '_, '_, 'info, Deposit<'info>>,
+    pub fn deposit(
+        ctx: Context<Deposit>,
         lp_token_amount: u64,
         maximum_token_0_amount: u64,
         maximum_token_1_amount: u64,
@@ -184,8 +174,8 @@ pub mod raydium_cp_swap {
     /// * `minimum_token_0_amount` -  Minimum amount of token 0 to receive, prevents excessive slippage
     /// * `minimum_token_1_amount` -  Minimum amount of token 1 to receive, prevents excessive slippage
     ///
-    pub fn withdraw<'info>(
-        ctx: Context<'_, '_, '_, 'info, Withdraw<'info>>,
+    pub fn withdraw(
+        ctx: Context<Withdraw>,
         lp_token_amount: u64,
         minimum_token_0_amount: u64,
         minimum_token_1_amount: u64,

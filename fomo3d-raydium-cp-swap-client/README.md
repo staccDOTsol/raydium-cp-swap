@@ -24,7 +24,7 @@ payer_path = /Users/jarettdunn/99.json
 
 admin_path =/Users/jarettdunn/99.json
 
-raydium_cp_program = CVF4q3yFpyQwV8DLDiJ9Ew6FFLE1vr5ToRzsXYQTaNrj
+raydium_cp_program = 2Ak7T2tKpg1HgjcvbEc58mMKbSDbPbLumGGacyidpqtY
 
 slippage = 0.5
 

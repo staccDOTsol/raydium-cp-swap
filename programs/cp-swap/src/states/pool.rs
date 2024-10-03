@@ -5,6 +5,7 @@ use std::ops::{BitAnd, BitOr, BitXor};
 use crate::curve::AMM;
 /// Seed to derive account address and signature
 pub const POOL_SEED: &str = "pool";
+pub const POOL_LP_MINT_SEED: &str = "pool_lp_mint";
 pub const POOL_VAULT_SEED: &str = "pool_vault";
 
 pub const Q32: u128 = (u32::MAX as u128) + 1; // 2^32
@@ -22,8 +23,8 @@ pub enum PoolStatusBitFlag {
 }
 
 #[account(zero_copy(unsafe))]
-#[derive(Default, Debug, AnchorDeserialize)]
 #[repr(packed)]
+#[derive(Default, Debug)]
 pub struct PoolState {
     /// Which config the pool belongs
     pub amm_config: Pubkey,
@@ -75,17 +76,14 @@ pub struct PoolState {
     pub open_time: u64,
     /// recent epoch
     pub recent_epoch: u64,
-
+    
     pub amm: AMM,
-    pub safu_lp_supply: u64,
-    /// padding for future updates
-    pub token_0_vault_safu: Pubkey,
-    pub token_1_vault_safu: Pubkey,
-    pub padding: [u64; 31 - 1 - 4 - 4],
+    
+    pub padding: [u64; 31 ],
 }
 
 impl PoolState {
-    pub const LEN: usize = 733 + 8;
+    pub const LEN: usize = 8 + 10 * 32 + 1 * 5 + 8 * 7 + 8 * 31;
 
     pub fn initialize(
         &mut self,
@@ -98,21 +96,21 @@ impl PoolState {
         token_1_vault: Pubkey,
         token_0_mint: &InterfaceAccount<Mint>,
         token_1_mint: &InterfaceAccount<Mint>,
-        lp_mint: &Pubkey,
+        lp_mint: &InterfaceAccount<Mint>,
         observation_key: Pubkey,
     ) {
         self.amm_config = amm_config.key();
         self.pool_creator = pool_creator.key();
         self.token_0_vault = token_0_vault;
         self.token_1_vault = token_1_vault;
-        self.lp_mint = *lp_mint;
+        self.lp_mint = lp_mint.key();
         self.token_0_mint = token_0_mint.key();
         self.token_1_mint = token_1_mint.key();
         self.token_0_program = *token_0_mint.to_account_info().owner;
         self.token_1_program = *token_1_mint.to_account_info().owner;
         self.observation_key = observation_key;
         self.auth_bump = auth_bump;
-        self.lp_mint_decimals = 9;
+        self.lp_mint_decimals = lp_mint.decimals;
         self.mint_0_decimals = token_0_mint.decimals;
         self.mint_1_decimals = token_1_mint.decimals;
         self.lp_supply = lp_supply;
@@ -122,7 +120,7 @@ impl PoolState {
         self.fund_fees_token_1 = 0;
         self.open_time = open_time;
         self.recent_epoch = Clock::get().unwrap().epoch;
-        self.padding = [0u64; 31 - 1 - 4 - 4];
+        self.padding = [0u64; 31];
     }
 
     pub fn set_status(&mut self, status: u8) {

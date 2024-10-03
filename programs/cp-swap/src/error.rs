@@ -30,4 +30,8 @@ pub enum ErrorCode {
     InvalidVault,
     #[msg("Init lp amount is too less(Because 100 amount lp will be locked)")]
     InitLpAmountTooLess,
+    #[msg("Sell result is none")]
+    SellResultNone,
+    #[msg("Buy result is none")]
+    BuyResultNone,
 }

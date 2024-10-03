@@ -1,10 +1,8 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
-use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
-use crate::utils::U128;
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
@@ -92,8 +90,18 @@ pub fn deposit(
     maximum_token_0_amount: u64,
     maximum_token_1_amount: u64,
 ) -> Result<()> {
+
     let pool_id = ctx.accounts.pool_state.key();
     let pool_state = &mut ctx.accounts.pool_state.load_mut()?;
+
+
+    let mut amm = pool_state.amm;
+    let buy_result = amm.apply_buy(lp_token_amount.into());
+    if buy_result.is_none() {
+        return err!(ErrorCode::BuyResultNone);
+    }
+    let buy_result = buy_result.unwrap();
+    
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit) {
         return err!(ErrorCode::NotApproved);
     }
@@ -130,30 +138,13 @@ pub fn deposit(
         )
     };
 
-    let mut amm = pool_state.amm;
+    // Magick
+    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
 
-    let liquidity = U128::from(transfer_token_0_amount)
-        .checked_mul(U128::from(transfer_token_1_amount))
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
-
-    let buy_result = amm.apply_buy(lp_token_amount.into()).unwrap();
-    msg!("liquidity: {}", liquidity);
-    
-
-    // Calculate the cost ratio based on sol_amount to liquidity
-    let cost_ratio = buy_result.sol_amount as f64 / liquidity as f64;
-
-    msg!("Cost ratio: {}", cost_ratio);
-
-    // Apply the cost ratio to both token amounts
     let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;
     let transfer_token_1_amount = (transfer_token_1_amount as f64 * cost_ratio).ceil() as u64;
-
-    msg!("Adjusted amount 0: {}", transfer_token_0_amount);
-    msg!("Adjusted amount 1: {}", transfer_token_1_amount);
-
+    pool_state.amm = amm;
+    
     #[cfg(feature = "enable-log")]
     msg!(
         "results.token_0_amount;{}, results.token_1_amount:{},transfer_token_0_amount:{},transfer_token_0_fee:{},
@@ -165,6 +156,18 @@ pub fn deposit(
         transfer_token_1_amount,
         transfer_token_1_fee
     );
+
+    emit!(LpChangeEvent {
+        pool_id,
+        lp_amount_before: pool_state.lp_supply,
+        token_0_vault_before: total_token_0_amount,
+        token_1_vault_before: total_token_1_amount,
+        token_0_amount,
+        token_1_amount,
+        token_0_transfer_fee: transfer_token_0_fee,
+        token_1_transfer_fee: transfer_token_1_fee,
+        change_type: 0
+    });
 
     if transfer_token_0_amount > maximum_token_0_amount
         || transfer_token_1_amount > maximum_token_1_amount
@@ -200,6 +203,8 @@ pub fn deposit(
         ctx.accounts.vault_1_mint.decimals,
     )?;
 
+    pool_state.lp_supply = pool_state.lp_supply.checked_add(lp_token_amount).unwrap();
+
     token_mint_to(
         ctx.accounts.authority.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
@@ -208,9 +213,7 @@ pub fn deposit(
         lp_token_amount,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-    pool_state.lp_supply += lp_token_amount;
     pool_state.recent_epoch = Clock::get()?.epoch;
-    pool_state.amm = amm;
 
     Ok(())
 }

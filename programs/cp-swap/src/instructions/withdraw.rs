@@ -1,10 +1,8 @@
 use crate::curve::CurveCalculator;
 use crate::curve::RoundDirection;
-use crate::curve::DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE;
 use crate::error::ErrorCode;
 use crate::states::*;
 use crate::utils::token::*;
-use crate::utils::U128;
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::{Mint, Token2022, TokenAccount};
@@ -96,6 +94,7 @@ pub struct Withdraw<'info> {
     )]
     pub memo_program: UncheckedAccount<'info>,
 }
+
 pub fn withdraw(
     ctx: Context<Withdraw>,
     lp_token_amount: u64,
@@ -122,33 +121,6 @@ pub fn withdraw(
     .ok_or(ErrorCode::ZeroTradingTokens)?;
 
     let token_0_amount = u64::try_from(results.token_0_amount).unwrap();
-    let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
-
-    let mut amm = pool_state.amm;
-
-    let liquidity = U128::from(token_0_amount)
-        .checked_mul(U128::from(token_1_amount))
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
-
-    let sell_result = amm.apply_sell(liquidity.into()).unwrap();
-    msg!("liquidity: {}", liquidity);
-    msg!("sell_result: {:?}", sell_result);
-
-    // Calculate the cost ratio based on sol_amount to liquidity
-    let return_ratio = sell_result.sol_amount as f64 / liquidity as f64;
-
-    msg!("Cost ratio: {}", return_ratio);
-
-    // Apply the return ratio to both token amounts
-    let token_0_amount = (token_0_amount as f64 * return_ratio).floor() as u64;
-    let token_1_amount = (token_1_amount as f64 * return_ratio).floor() as u64;
-
-    msg!("Adjusted amount 0: {}", token_0_amount);
-    msg!("Adjusted amount 1: {}", token_1_amount);
-
-    // The LP tokens to burn is the token_amount from sell_result
     let token_0_amount = std::cmp::min(total_token_0_amount, token_0_amount);
     let (receive_token_0_amount, token_0_transfer_fee) = {
         let transfer_fee = get_transfer_fee(&ctx.accounts.vault_0_mint.to_account_info(), token_0_amount)?;
@@ -158,6 +130,7 @@ pub fn withdraw(
         )
     };
 
+    let token_1_amount = u64::try_from(results.token_1_amount).unwrap();
     let token_1_amount = std::cmp::min(total_token_1_amount, token_1_amount);
     let (receive_token_1_amount, token_1_transfer_fee) = {
         let transfer_fee = get_transfer_fee(&ctx.accounts.vault_1_mint.to_account_info(), token_1_amount)?;
@@ -166,19 +139,46 @@ pub fn withdraw(
             transfer_fee,
         )
     };
+    let mut amm = pool_state.amm;
+    let sell_result = amm.apply_sell(lp_token_amount as u128);
+    if sell_result.is_none() {
+        return err!(ErrorCode::SellResultNone);
+    }
+    let sell_result = sell_result.unwrap();
+    
+    // Magick
+
+    let cost_ratio = sell_result.sol_amount as f64 / Q32 as f64;
+
+    let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
+    let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    
+    pool_state.amm = amm;
+    
+    
 
     #[cfg(feature = "enable-log")]
     msg!(
-        "results.token_0_amount:{}, results.token_1_amount:{}, receive_token_0_amount:{}, token_0_transfer_fee:{},
-        receive_token_1_amount:{}, token_1_transfer_fee:{}, lp_tokens_to_burn:{}",
+        "results.token_0_amount;{}, results.token_1_amount:{},receive_token_0_amount:{},token_0_transfer_fee:{},
+            receive_token_1_amount:{},token_1_transfer_fee:{}",
         results.token_0_amount,
         results.token_1_amount,
         receive_token_0_amount,
         token_0_transfer_fee,
         receive_token_1_amount,
-        token_1_transfer_fee,
-        lp_tokens_to_burn
+        token_1_transfer_fee
     );
+    emit!(LpChangeEvent {
+        pool_id,
+        lp_amount_before: pool_state.lp_supply,
+        token_0_vault_before: total_token_0_amount,
+        token_1_vault_before: total_token_1_amount,
+        token_0_amount: receive_token_0_amount,
+        token_1_amount: receive_token_1_amount,
+        token_0_transfer_fee,
+        token_1_transfer_fee,
+        change_type: 1
+    });
 
     if receive_token_0_amount < minimum_token_0_amount
         || receive_token_1_amount < minimum_token_1_amount
@@ -186,6 +186,7 @@ pub fn withdraw(
         return Err(ErrorCode::ExceededSlippage.into());
     }
 
+    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
@@ -224,9 +225,6 @@ pub fn withdraw(
         ctx.accounts.vault_1_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
-
-    pool_state.amm = amm;
-    pool_state.lp_supply -= lp_token_amount;
     pool_state.recent_epoch = Clock::get()?.epoch;
 
     Ok(())
