@@ -1804,6 +1804,7 @@ dependencies = [
  "clap 4.5.18",
  "colorful",
  "configparser",
+ "hex",
  "lazy_static",
  "mpl-token-metadata",
  "rand 0.8.5",
