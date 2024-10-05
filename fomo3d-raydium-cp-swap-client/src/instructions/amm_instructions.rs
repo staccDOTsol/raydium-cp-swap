@@ -33,7 +33,7 @@ pub fn collect_protocol_fee_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
@@ -77,7 +77,7 @@ pub fn collect_fund_fee_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
@@ -120,7 +120,7 @@ pub fn initialize_amm_config_instr(
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (amm_config_key, _bump) = Pubkey::find_program_address(
@@ -168,7 +168,7 @@ pub fn initialize_pool_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (amm_config_key, __bump) = Pubkey::find_program_address(
@@ -308,7 +308,7 @@ pub fn deposit_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
@@ -362,7 +362,7 @@ pub fn withdraw_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
@@ -418,7 +418,7 @@ pub fn swap_base_input_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());
@@ -468,7 +468,7 @@ pub fn swap_base_output_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(config.raydium_cp_program)?;
 
     let (authority, __bump) = Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &program.id());

@@ -1198,7 +1198,7 @@ fn execute_raydium_command(
 
             // calculate amount
             let results = raydium_cp_swap::curve::CurveCalculator::lp_tokens_to_trading_tokens(
-                u128::from(lp_token_amount),
+                u128::from(*lp_token_amount),
                 u128::from(pool_state.lp_supply),
                 u128::from(total_token_0_amount),
                 u128::from(total_token_1_amount),
@@ -1259,7 +1259,7 @@ fn execute_raydium_command(
             }
             let deposit_instr = deposit_instr(
                 &pool_config,
-                pool_id,
+                *pool_id,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
                 pool_state.lp_mint,
@@ -1271,7 +1271,7 @@ fn execute_raydium_command(
                     &payer.pubkey(),
                     &pool_state.lp_mint,
                 ),
-                lp_token_amount,
+                *lp_token_amount,
                 amount_0_max * 10000000,
                 amount_1_max * 10000000,
             )?;
@@ -1353,7 +1353,7 @@ fn execute_raydium_command(
             );
             // calculate amount
             let results = raydium_cp_swap::curve::CurveCalculator::lp_tokens_to_trading_tokens(
-                u128::from(lp_token_amount),
+                u128::from(*lp_token_amount),
                 u128::from(pool_state.lp_supply),
                 u128::from(total_token_0_amount),
                 u128::from(total_token_1_amount),
@@ -1484,7 +1484,7 @@ fn execute_raydium_command(
                 pool_state.token_1_vault,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
-                user_input_token,
+                *user_input_token,
             ];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
             let epoch = rpc_client.get_epoch_info().unwrap().epoch;
@@ -1542,7 +1542,7 @@ fn execute_raydium_command(
                     pool_state.token_1_mint,
                     spl_token::id(), //todo fix
                     spl_token::id(), //todo fix
-                    get_transfer_fee(&token_0_mint_info, epoch, user_input_amount),
+                    get_transfer_fee(&token_0_mint_info, epoch, *user_input_amount),
                 )
             } else {
                 (
@@ -1560,7 +1560,7 @@ fn execute_raydium_command(
                     pool_state.token_0_mint,
                     spl_token::id(), //todo fix
                     spl_token::id(), //todo fix
-                    get_transfer_fee(&token_1_mint_info, epoch, user_input_amount),
+                    get_transfer_fee(&token_1_mint_info, epoch, *user_input_amount),
                 )
             };
             let (input_token_creator_rate, input_token_lp_rate) = match trade_direction {
@@ -1610,10 +1610,10 @@ fn execute_raydium_command(
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_input_instr(
                 &pool_config,
-                pool_id,
+                *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
-                user_input_token,
+                *user_input_token,
                 user_output_token,
                 input_vault,
                 output_vault,
@@ -1621,7 +1621,7 @@ fn execute_raydium_command(
                 output_token_mint,
                 input_token_program,
                 output_token_program,
-                user_input_amount,
+                *user_input_amount,
                 minimum_amount_out,
             )?;
             instructions.extend(swap_base_in_instr);
@@ -1693,7 +1693,7 @@ fn execute_raydium_command(
                 pool_state.token_1_vault,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
-                user_input_token,
+                *user_input_token,
             ];
             let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
             let epoch = rpc_client.get_epoch_info().unwrap().epoch;
@@ -1751,7 +1751,7 @@ fn execute_raydium_command(
                     pool_state.token_1_mint,
                     spl_token::id(), //todo fix
                     spl_token::id(), //todo fix
-                    get_transfer_inverse_fee(&token_1_mint_info, epoch, amount_out_less_fee),
+                    get_transfer_inverse_fee(&token_1_mint_info, epoch, *amount_out_less_fee),
                 )
             } else {
                 (
@@ -1769,7 +1769,7 @@ fn execute_raydium_command(
                     pool_state.token_0_mint,
                     spl_token::id(), //todo fix
                     spl_token::id(), //todo fix
-                    get_transfer_inverse_fee(&token_0_mint_info, epoch, amount_out_less_fee),
+                    get_transfer_inverse_fee(&token_0_mint_info, epoch, *amount_out_less_fee),
                 )
             };
             let actual_amount_out = amount_out_less_fee.checked_add(out_transfer_fee).unwrap();
@@ -1821,10 +1821,10 @@ fn execute_raydium_command(
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_output_instr(
                 &pool_config,
-                pool_id,
+                *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
-                user_input_token,
+                *user_input_token,
                 user_output_token,
                 input_vault,
                 output_vault,
@@ -1833,7 +1833,7 @@ fn execute_raydium_command(
                 input_token_program,
                 output_token_program,
                 max_amount_in,
-                amount_out_less_fee,
+                *amount_out_less_fee,
             )?;
             instructions.extend(swap_base_in_instr);
             let signers = vec![&payer];

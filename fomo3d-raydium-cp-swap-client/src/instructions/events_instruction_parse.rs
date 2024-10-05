@@ -1,6 +1,6 @@
 use anchor_client::ClientError;
 use anchor_lang::Discriminator;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use colorful::Color;
 use colorful::Colorful;
 use hex;
@@ -13,6 +13,7 @@ use solana_transaction_status::{
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
+use anchor_lang::error::ErrorCode;
 
 pub enum InstructionDecodeType {
     BaseHex,
@@ -283,12 +284,19 @@ pub fn parse_program_instruction(
                     .map(|&index| account_keys[index as usize].clone())
                     .collect();
 
-                let chain_instruction = handle_program_instruction(
+                match handle_program_instruction(
                     &ui_compiled_instruction.data,
                     InstructionDecodeType::Base58,
                     accounts,
-                )?;
-                chain_instructions.push(chain_instruction);
+                ) {
+                    Ok(chain_instruction) => {
+                        chain_instructions.push(chain_instruction);
+                    }
+                    Err(e) => {
+                        eprintln!("Error decoding instruction: {}", e);
+                        continue;
+                    }
+                }
             }
         }
 
@@ -309,12 +317,19 @@ pub fn parse_program_instruction(
                                 .map(|&index| account_keys[index as usize].clone())
                                 .collect();
 
-                            let chain_instruction = handle_program_instruction(
+                            match handle_program_instruction(
                                 &ui_compiled_instruction.data,
                                 InstructionDecodeType::Base58,
                                 accounts,
-                            )?;
-                            chain_instructions.push(chain_instruction);
+                            ) {
+                                Ok(chain_instruction) => {
+                                    chain_instructions.push(chain_instruction);
+                                }
+                                Err(e) => {
+                                    eprintln!("Error decoding inner instruction: {}", e);
+                                    continue;
+                                }
+                            }
                         }
                     }
                 }
@@ -329,16 +344,25 @@ pub fn handle_program_instruction(
     instr_data: &str,
     decode_type: InstructionDecodeType,
     accounts: Vec<String>,
-) -> Result<ChainInstructions, ClientError> {
+) -> Result<ChainInstructions> {
     let data = match decode_type {
         InstructionDecodeType::BaseHex => hex::decode(instr_data).unwrap(),
-        InstructionDecodeType::Base64 => anchor_lang::__private::base64::decode(instr_data)
-            .map_err(|_| {
-                ClientError::LogParseError("Could not base64 decode instruction".to_string())
-            })?,
-        InstructionDecodeType::Base58 => bs58::decode(instr_data).into_vec().map_err(|_| {
-            ClientError::LogParseError("Could not base58 decode instruction".to_string())
-        })?,
+        InstructionDecodeType::Base64 => match anchor_lang::__private::base64::decode(instr_data) {
+            Ok(decoded) => decoded,
+            Err(_) => {
+                return Err(anyhow::anyhow!(ClientError::LogParseError(
+                    "Could not base64 decode instruction".to_string()
+                )))
+            }
+        },
+        InstructionDecodeType::Base58 => match bs58::decode(instr_data).into_vec() {
+            Ok(decoded) => decoded,
+            Err(_) => {
+                return Err(anyhow::anyhow!(ClientError::LogParseError(
+                    "Could not base58 decode instruction".to_string()
+                )))
+            }
+        },
     };
 
     let mut ix_data: &[u8] = &data[..];
@@ -351,58 +375,86 @@ pub fn handle_program_instruction(
 
     match disc {
         instruction::CreateAmmConfig::DISCRIMINATOR => {
-            let ix: instruction::CreateAmmConfig = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::CreateAmmConfig {
-                index: ix.index as u16,
-                trade_fee_rate: ix.token_0_creator_rate,
-                protocol_fee_rate: ix.token_1_lp_rate,
-                fund_fee_rate: ix.token_0_lp_rate,
-                create_pool_fee: ix.token_1_creator_rate,
-            })
+            match decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::CreateAmmConfig {
+                    index: ix.index as u16,
+                    trade_fee_rate: ix.token_0_creator_rate,
+                    protocol_fee_rate: ix.token_1_lp_rate,
+                    fund_fee_rate: ix.token_0_lp_rate,
+                    create_pool_fee: ix.token_1_creator_rate,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode CreateAmmConfig instruction: {}",
+                    e
+                )),
+            }
         }
         instruction::Initialize::DISCRIMINATOR => {
-            let ix: instruction::Initialize = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::Initialize {
-                token_0_mint: accounts[4].clone(),
-                token_1_mint: accounts[5].clone(),
-                init_amount_0: ix.init_amount_0,
-                init_amount_1: ix.init_amount_1,
-                open_time: ix.open_time,
-            })
+            match decode_instruction::<instruction::Initialize>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::Initialize {
+                    token_0_mint: accounts[4].clone(),
+                    token_1_mint: accounts[5].clone(),
+                    init_amount_0: ix.init_amount_0,
+                    init_amount_1: ix.init_amount_1,
+                    open_time: ix.open_time,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode Initialize instruction: {}",
+                    e
+                )),
+            }
         }
         instruction::Deposit::DISCRIMINATOR => {
-            let ix: instruction::Deposit = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::Deposit {
-                lp_token_amount: ix.lp_token_amount,
-                maximum_token_0_amount: ix.maximum_token_0_amount,
-                maximum_token_1_amount: ix.maximum_token_1_amount,
-            })
+            match decode_instruction::<instruction::Deposit>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::Deposit {
+                    lp_token_amount: ix.lp_token_amount,
+                    maximum_token_0_amount: ix.maximum_token_0_amount,
+                    maximum_token_1_amount: ix.maximum_token_1_amount,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode Deposit instruction: {}",
+                    e
+                )),
+            }
         }
         instruction::Withdraw::DISCRIMINATOR => {
-            let ix: instruction::Withdraw = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::Withdraw {
-                lp_token_amount: ix.lp_token_amount,
-                minimum_token_0_amount: ix.minimum_token_0_amount,
-                minimum_token_1_amount: ix.minimum_token_1_amount,
-            })
+            match decode_instruction::<instruction::Withdraw>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::Withdraw {
+                    lp_token_amount: ix.lp_token_amount,
+                    minimum_token_0_amount: ix.minimum_token_0_amount,
+                    minimum_token_1_amount: ix.minimum_token_1_amount,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode Withdraw instruction: {}",
+                    e
+                )),
+            }
         }
         instruction::SwapBaseInput::DISCRIMINATOR => {
-            let ix: instruction::SwapBaseInput = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::SwapBaseInput {
-                amount_in: ix.amount_in,
-                minimum_amount_out: ix.minimum_amount_out,
-            })
+            match decode_instruction::<instruction::SwapBaseInput>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::SwapBaseInput {
+                    amount_in: ix.amount_in,
+                    minimum_amount_out: ix.minimum_amount_out,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode SwapBaseInput instruction: {}",
+                    e
+                )),
+            }
         }
         instruction::SwapBaseOutput::DISCRIMINATOR => {
-            let ix: instruction::SwapBaseOutput = decode_instruction(&mut ix_data)?;
-            Ok(ChainInstructions::SwapBaseOutput {
-                max_amount_in: ix.max_amount_in,
-                amount_out: ix.amount_out,
-            })
+            match decode_instruction::<instruction::SwapBaseOutput>(&mut ix_data) {
+                Ok(ix) => Ok(ChainInstructions::SwapBaseOutput {
+                    max_amount_in: ix.max_amount_in,
+                    amount_out: ix.amount_out,
+                }),
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to decode SwapBaseOutput instruction: {}",
+                    e
+                )),
+            }
         }
-        _ => Err(ClientError::LogParseError(
-            "Unknown instruction".to_string(),
-        )),
+        _ => Err(anyhow::anyhow!("Unknown instruction")),
     }
 }
 

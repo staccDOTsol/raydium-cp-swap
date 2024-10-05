@@ -29,7 +29,7 @@ pub fn create_and_init_mint_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = if token_program == spl_token::id() {
         client.program(spl_token::id())?
     } else {
@@ -52,7 +52,7 @@ pub fn create_account_rent_exmpt_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(owner)?;
     let instructions = program
         .request()
@@ -78,7 +78,7 @@ pub fn create_ata_token_account_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(token_program)?;
     let instructions = program
         .request()
@@ -104,7 +104,7 @@ pub fn create_and_init_auxiliary_token(
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     let mint_account = &mut RpcClient::new(config.http_url.to_string()).get_account(&mint)?;
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let (program, space) = if mint_account.owner == spl_token::id() {
         (
             client.program(spl_token::id())?,
@@ -161,7 +161,7 @@ pub fn close_token_account(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(spl_token::id())?;
     let instructions = program
         .request()
@@ -187,7 +187,7 @@ pub fn spl_token_transfer_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = client.program(spl_token::id())?;
     let instructions = program
         .request()
@@ -215,7 +215,7 @@ pub fn spl_token_mint_to_instr(
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
     // Client.
-    let client = Client::new(url, Rc::new(payer));
+    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
     let program = if token_program == spl_token::id() {
         client.program(spl_token::id())?
     } else {
@@ -236,36 +236,36 @@ pub fn spl_token_mint_to_instr(
     Ok(instructions)
 }
 
-pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path);
-    let wallet_key = payer.pubkey();
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    let wsol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
-    let wsol_ata_account =
-        spl_associated_token_account::get_associated_token_address(&wallet_key, &wsol_mint);
-    // Client.
-    let client = Client::new(url, Rc::new(payer));
-    let program = client.program(spl_token::id())?;
+// pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruction>> {
+//     let payer = read_keypair_file(&config.payer_path);
+//     let wallet_key = payer.pubkey();
+//     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
+//     let wsol_mint = Pubkey::from_str("So11111111111111111111111111111111111111112")?;
+//     let wsol_ata_account =
+//         spl_associated_token_account::get_associated_token_address(&wallet_key, &wsol_mint);
+//     // Client.
+//     let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
+//     let program = client.program(spl_token::id())?;
 
-    let instructions = program
-        .request()
-        .instruction(
-            spl_associated_token_account::instruction::create_associated_token_account_idempotent(
-                &program.payer(),
-                &wallet_key,
-                &wsol_mint,
-                &program.id(),
-            ),
-        )
-        .instruction(system_instruction::transfer(
-            &wallet_key,
-            &wsol_ata_account,
-            amount,
-        ))
-        .instruction(spl_token::instruction::sync_native(
-            &program.id(),
-            &wsol_ata_account,
-        )?)
-        .instructions()?;
-    Ok(instructions)
-}
+//     let instructions = program
+//         .request()
+//         .instruction(
+//             spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+//                 &program.payer(),
+//                 &wallet_key,
+//                 &wsol_mint,
+//                 &program.id(),
+//             ),
+//         )
+//         .instruction(system_instruction::transfer(
+//             &wallet_key,
+//             &wsol_ata_account,
+//             amount,
+//         ))
+//         .instruction(spl_token::instruction::sync_native(
+//             &program.id(),
+//             &wsol_ata_account,
+//         )?)
+//         .instructions()?;
+//     Ok(instructions)
+// }
