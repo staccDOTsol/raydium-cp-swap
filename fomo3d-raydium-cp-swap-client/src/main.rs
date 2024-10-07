@@ -31,6 +31,8 @@ use spl_associated_token_account::get_associated_token_address_with_program_id;
 use std::ops::Add;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 mod instructions;
 use instructions::rpc::*;
@@ -40,9 +42,16 @@ use instructions::{amm_instructions::*, rpc};
 use lazy_static::lazy_static;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
-    EncodedConfirmedTransactionWithStatusMeta, EncodedTransaction, UiTransactionStatusMeta,
+    EncodedConfirmedTransactionWithStatusMeta, UiMessage, UiParsedMessage, EncodedTransaction, UiTransaction, UiTransactionStatusMeta,
+    UiInstruction,
+    UiParsedInstruction,
+    UiAddressTableLookup,
+    UiPartiallyDecodedInstruction,
 };
+use thiserror::Error;
+use solana_transaction_status::option_serializer::OptionSerializer;
 use spl_token_2022::{
     extension::StateWithExtensionsMut,
     state::{Account, Mint},
@@ -50,10 +59,385 @@ use spl_token_2022::{
 use std::fs;
 use std::path::Path;
 use std::sync::Mutex;
+use serde::{Deserialize, Serialize};
+
+pub type StringAmount = String;
+pub type StringDecimals = String;
 
 lazy_static! {
     static ref GLOBAL_AMM_INDEX: Mutex<u64> = Mutex::new(0);
 }
+
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyEncodedConfirmedTransactionWithStatusMeta {
+    slot: u64,
+    transaction: MyEncodedTransactionWithStatusMeta,
+    block_time: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyEncodedTransactionWithStatusMeta {
+    transaction: MyUiTransaction,
+    meta: Option<MyUiTransactionStatusMeta>,
+    version: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiTransactionStatusMeta {
+    pub err: Option<MyTransactionError>,
+    pub status: MyTransactionResult<()>, // This field is deprecated
+    pub fee: u64,
+    pub pre_balances: Vec<u64>,
+    pub post_balances: Vec<u64>,
+    #[serde(
+        default = "OptionSerializer::none",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub inner_instructions: OptionSerializer<Vec<MyUiInnerInstructions>>,
+    #[serde(
+        default = "OptionSerializer::none",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub log_messages: OptionSerializer<Vec<String>>,
+    #[serde(
+        default = "OptionSerializer::none",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub pre_token_balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>,
+    #[serde(
+        default = "OptionSerializer::none",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub post_token_balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>,
+    #[serde(
+        default = "OptionSerializer::none",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub rewards: OptionSerializer<MyRewards>,
+    #[serde(
+        default = "OptionSerializer::skip",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub loaded_addresses: OptionSerializer<MyUiLoadedAddresses>,
+    #[serde(
+        default = "OptionSerializer::skip",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub return_data: OptionSerializer<MyUiTransactionReturnData>,
+    #[serde(
+        default = "OptionSerializer::skip",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub compute_units_consumed: OptionSerializer<u64>,
+}
+
+#[derive(Error, Debug, Serialize, Deserialize)]
+pub enum MyTransactionError {
+    /// An account is already being processed in another transaction in a way
+    /// that does not support parallelism
+    #[error("Account in use")]
+    AccountInUse,
+
+    /// A `Pubkey` appears twice in the transaction's `account_keys`.  Instructions can reference
+    /// `Pubkey`s more than once but the message must contain a list with no duplicate keys
+    #[error("Account loaded twice")]
+    AccountLoadedTwice,
+
+    /// Attempt to debit an account but found no record of a prior credit.
+    #[error("Attempt to debit an account but found no record of a prior credit.")]
+    AccountNotFound,
+
+    /// Attempt to load a program that does not exist
+    #[error("Attempt to load a program that does not exist")]
+    ProgramAccountNotFound,
+
+    /// The from `Pubkey` does not have sufficient balance to pay the fee to schedule the transaction
+    #[error("Insufficient funds for fee")]
+    InsufficientFundsForFee,
+
+    /// This account may not be used to pay transaction fees
+    #[error("This account may not be used to pay transaction fees")]
+    InvalidAccountForFee,
+
+    /// The bank has seen this transaction before. This can occur under normal operation
+    /// when a UDP packet is duplicated, as a user error from a client not updating
+    /// its `recent_blockhash`, or as a double-spend attack.
+    #[error("This transaction has already been processed")]
+    AlreadyProcessed,
+
+    /// The bank has not seen the given `recent_blockhash` or the transaction is too old and
+    /// the `recent_blockhash` has been discarded.
+    #[error("Blockhash not found")]
+    BlockhashNotFound,
+
+    /// An error occurred while processing an instruction. The first element of the tuple
+    /// indicates the instruction index in which the error occurred.
+    #[error("Error processing Instruction {0}: {1}")]
+    InstructionError(u8, InstructionError),
+
+    /// Loader call chain is too deep
+    #[error("Loader call chain is too deep")]
+    CallChainTooDeep,
+
+    /// Transaction requires a fee but has no signature present
+    #[error("Transaction requires a fee but has no signature present")]
+    MissingSignatureForFee,
+
+    /// Transaction contains an invalid account reference
+    #[error("Transaction contains an invalid account reference")]
+    InvalidAccountIndex,
+
+    /// Transaction did not pass signature verification
+    #[error("Transaction did not pass signature verification")]
+    SignatureFailure,
+
+    /// This program may not be used for executing instructions
+    #[error("This program may not be used for executing instructions")]
+    InvalidProgramForExecution,
+
+    /// Transaction failed to sanitize accounts offsets correctly
+    /// implies that account locks are not taken for this TX, and should
+    /// not be unlocked.
+    #[error("Transaction failed to sanitize accounts offsets correctly")]
+    SanitizeFailure,
+
+    #[error("Transactions are currently disabled due to cluster maintenance")]
+    ClusterMaintenance,
+
+    /// Transaction processing left an account with an outstanding borrowed reference
+    #[error("Transaction processing left an account with an outstanding borrowed reference")]
+    AccountBorrowOutstanding,
+
+    /// Transaction would exceed max Block Cost Limit
+    #[error("Transaction would exceed max Block Cost Limit")]
+    WouldExceedMaxBlockCostLimit,
+
+    /// Transaction version is unsupported
+    #[error("Transaction version is unsupported")]
+    UnsupportedVersion,
+
+    /// Transaction loads a writable account that cannot be written
+    #[error("Transaction loads a writable account that cannot be written")]
+    InvalidWritableAccount,
+
+    /// Transaction would exceed max account limit within the block
+    #[error("Transaction would exceed max account limit within the block")]
+    WouldExceedMaxAccountCostLimit,
+
+    /// Transaction would exceed account data limit within the block
+    #[error("Transaction would exceed account data limit within the block")]
+    WouldExceedAccountDataBlockLimit,
+
+    /// Transaction locked too many accounts
+    #[error("Transaction locked too many accounts")]
+    TooManyAccountLocks,
+
+    /// Address lookup table not found
+    #[error("Transaction loads an address table account that doesn't exist")]
+    AddressLookupTableNotFound,
+
+    /// Attempted to lookup addresses from an account owned by the wrong program
+    #[error("Transaction loads an address table account with an invalid owner")]
+    InvalidAddressLookupTableOwner,
+
+    /// Attempted to lookup addresses from an invalid account
+    #[error("Transaction loads an address table account with invalid data")]
+    InvalidAddressLookupTableData,
+
+    /// Address table lookup uses an invalid index
+    #[error("Transaction address table lookup uses an invalid index")]
+    InvalidAddressLookupTableIndex,
+
+    /// Transaction leaves an account with a lower balance than rent-exempt minimum
+    #[error("Transaction leaves an account with a lower balance than rent-exempt minimum")]
+    InvalidRentPayingAccount,
+
+    /// Transaction would exceed max Vote Cost Limit
+    #[error("Transaction would exceed max Vote Cost Limit")]
+    WouldExceedMaxVoteCostLimit,
+
+    /// Transaction would exceed total account data limit
+    #[error("Transaction would exceed total account data limit")]
+    WouldExceedAccountDataTotalLimit,
+
+    /// Transaction contains a duplicate instruction that is not allowed
+    #[error("Transaction contains a duplicate instruction ({0}) that is not allowed")]
+    DuplicateInstruction(u8),
+
+    /// Transaction results in an account with insufficient funds for rent
+    #[error(
+        "Transaction results in an account ({account_index}) with insufficient funds for rent"
+    )]
+    InsufficientFundsForRent { account_index: u8 },
+
+    /// Transaction exceeded max loaded accounts data size cap
+    #[error("Transaction exceeded max loaded accounts data size cap")]
+    MaxLoadedAccountsDataSizeExceeded,
+
+    /// LoadedAccountsDataSizeLimit set for transaction must be greater than 0.
+    #[error("LoadedAccountsDataSizeLimit set for transaction must be greater than 0.")]
+    InvalidLoadedAccountsDataSizeLimit,
+
+    /// Sanitized transaction differed before/after feature activiation. Needs to be resanitized.
+    #[error("ResanitizationNeeded")]
+    ResanitizationNeeded,
+
+    /// Program execution is temporarily restricted on an account.
+    #[error("Execution of the program referenced by account at index {account_index} is temporarily restricted.")]
+    ProgramExecutionTemporarilyRestricted { account_index: u8 },
+
+    /// The total balance before the transaction does not equal the total balance after the transaction
+    #[error("Sum of account balances before and after transaction do not match")]
+    UnbalancedTransaction,
+}
+
+pub type MyTransactionResult<T> = std::result::Result<T, MyTransactionError>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiInnerInstructions {
+    pub index: u8,
+    pub instructions: Vec<MyUiInstruction>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiTransactionTokenBalance {
+    pub account_index: u8,
+    pub mint: String,
+    pub ui_token_amount: MyUiTokenAmount,
+    #[serde(
+        default = "OptionSerializer::skip",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub owner: OptionSerializer<String>,
+    #[serde(
+        default = "OptionSerializer::skip",
+        skip_serializing_if = "OptionSerializer::should_skip"
+    )]
+    pub program_id: OptionSerializer<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiTokenAmount {
+    pub ui_amount: Option<f64>,
+    pub decimals: u8,
+    pub amount: StringAmount,
+    pub ui_amount_string: StringDecimals,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyReward {
+    pub pubkey: String,
+    pub lamports: i64,
+    pub post_balance: u64, 
+    pub reward_type: Option<MyRewardType>,
+    pub commission: Option<u8>,
+}
+
+pub type MyRewards = Vec<MyReward>;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum MyRewardType {
+    Fee,
+    Rent,
+    Staking,
+    Voting,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiLoadedAddresses {
+    pub writable: Vec<String>,
+    pub readonly: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiTransactionReturnData {
+    pub program_id: String,
+    pub data: (String, MyUiReturnDataEncoding),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum MyUiReturnDataEncoding {
+    Base64,
+}
+
+// #[derive(Debug, Serialize, Deserialize)]
+// pub enum MyOptionSerializer<T> {
+//     Some(T),
+//     None,
+//     Skip,
+// }
+
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyUiTransaction {
+    signatures: Vec<String>,
+    message: MyUiParsedMessage,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyUiParsedMessage {
+    account_keys: Vec<MyParsedAccount>,
+    recent_blockhash: String,
+    instructions: Vec<MyUiParsedInstruction>,
+    address_table_lookups: Option<Vec<MyUiAddressTableLookup>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyParsedAccount {
+    pubkey: String,
+    writable: bool,
+    signer: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyUiParsedInstruction {
+    program_id: String,
+    accounts: Option<Vec<String>>,
+    data: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct MyUiAddressTableLookup {
+    account_key: String,
+    writable_indexes: Vec<u8>,
+    readonly_indexes: Vec<u8>,
+}
+
+
+
+fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
+    UiTransaction {
+        signatures: my_tx.signatures,
+        message: UiMessage::Parsed(UiParsedMessage {
+            account_keys: my_tx.message.account_keys.into_iter().map(|key| ParsedAccount {
+                pubkey: key.pubkey,
+                writable: key.writable,
+                signer: key.signer,
+                source: None,  // If `source` is needed, adapt the structure here
+            }).collect(),
+            recent_blockhash: my_tx.message.recent_blockhash,
+            instructions: my_tx.message.instructions.into_iter().map(|instr| UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
+                program_id: instr.program_id,
+                accounts: instr.accounts.unwrap(),  
+                data: instr.data.unwrap(),
+                stack_height: None,
+            }))).collect(),
+            address_table_lookups: my_tx.message.address_table_lookups.map(|lookups| {
+                lookups.into_iter().map(|lookup| UiAddressTableLookup {
+                    account_key: lookup.account_key,
+                    writable_indexes: lookup.writable_indexes,
+                    readonly_indexes: lookup.readonly_indexes,
+                }).collect()
+            }),
+        }),
+    }
+}
+
+fn convert_to_encoded_transaction(ui_tx: UiTransaction) -> EncodedTransaction {
+    EncodedTransaction::Json(ui_tx)
+}
+
 
 // Helper function to get and increment the index
 fn get_and_increment_index() -> u64 {
@@ -981,9 +1365,10 @@ fn generate_random_string() -> String {
         .collect()
 }
 
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir_path = Path::new("cp-swap-txs");
-    let pool_config = load_cfg(&"./client_config.ini".to_string())?;
+    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
+    let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
     let payer = read_keypair_file(&pool_config.payer_path)?;
     let program_id = pool_config.raydium_cp_program;
     let rpc_client =
@@ -993,34 +1378,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for entry in fs::read_dir(dir_path)? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().and_then(|s| s.to_str()) == Some("json") {
-            let file_content = fs::read_to_string(&path)?;
-            let element: EncodedConfirmedTransactionWithStatusMeta = from_str(&file_content)?;
+        println!("Processing file: {:?}", entry);
+        println!("Starting to process transactions");
+        if path.extension().and_then(|s| s.to_str()) == Some("txt") {
+            let file = File::open(path)?;
+            let reader = BufReader::new(file);
 
-            if let encoded_transaction = element.transaction.transaction {
-                let meta = element.transaction.meta.clone();
-                let mut instructions = parse_program_instruction(
-                    program_id.to_string().as_str(),
-                    encoded_transaction,
-                    meta,
-                )?;
+            for line in reader.lines() {
+                let line = line?;
+                // Process each line here
+                println!("Processing line: {:?}", line);
+                
+                let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
+                let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
 
-                instructions.reverse(); // Reverse the instructions vector
+    // Convert UiTransaction to EncodedTransaction
+                let encoded_tx = convert_to_encoded_transaction(ui_tx);
+                if let encoded_transaction = encoded_tx {
+                    let meta = encoded_tx.meta.clone();
+                    let mut instructions = parse_program_instruction(
+                        program_id.to_string().as_str(),
+                        encoded_transaction,
+                        meta,
+                    )?;
 
-                for instruction in instructions {
-                    if let raydium_command = instruction.to_raydium_cp_commands() {
-                        execute_raydium_command(
-                            &rpc_client,
-                            &pool_config,
-                            &payer,
-                            &raydium_command,
-                            &mut mint_account_owner_cache,
-                        )?;
+                    instructions.reverse(); // Reverse the instructions vector
+
+                    for instruction in instructions {
+                        if let raydium_command = instruction.to_raydium_cp_commands() {
+                            execute_raydium_command(
+                                &rpc_client,
+                                &pool_config,
+                                &payer,
+                                &raydium_command,
+                                &mut mint_account_owner_cache,
+                            )?;
+                        }
                     }
                 }
             }
         }
     }
+
+    print!("Done processing transactions");
 
     Ok(())
 }
