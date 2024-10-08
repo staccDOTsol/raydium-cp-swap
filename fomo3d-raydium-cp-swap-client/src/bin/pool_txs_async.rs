@@ -3,18 +3,22 @@ use bs58;
 use futures::stream;
 use futures::StreamExt;
 use rand::seq::SliceRandom;
+use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
 use solana_client::rpc_config::RpcTransactionConfig;
+use solana_program::pubkey;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
 use std::fs::create_dir_all;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::Semaphore;
+
 // use tokio::time::{sleep, Duration};
 
 const SIGNATURE_BYTES: usize = 64;
@@ -110,14 +114,18 @@ async fn read_public_keys(filename: &str, limit: usize) -> Result<Vec<Pubkey>> {
 }
 
 async fn process_pubkey(client: Arc<RpcClient>, pubkey: &Pubkey, txs_dir: &Path) -> Result<()> {
-    let tx_file_path = txs_dir.join(format!("{}.txt", pubkey));
+    let tx_file_path = txs_dir.join(format!("{}.json", pubkey));
     let mut file = File::create(&tx_file_path)
         .await
         .context("Failed to create transaction file")?;
 
     // Fetch all signatures
     let signatures = fetch_all_signatures(&client, pubkey).await?;
-    println!("Fetched {} signatures for {}", signatures.len(), pubkey);
+    println!(
+        "Fetched {} signatures for {}. let's fetch them transactions",
+        signatures.len(),
+        pubkey
+    );
 
     // Fetch all transaction data
     let transactions = fetch_all_transactions(&client, &signatures).await?;
@@ -217,24 +225,48 @@ async fn write_transactions_to_file(
     let mut writer = BufWriter::with_capacity(1024 * 1024, file); // 1MB buffer
     let batch_size = 1000; // Adjust based on your needs
 
-    for chunk in transactions.chunks(batch_size) {
-        let mut batch = String::with_capacity(chunk.len() * 1024); // Estimate 1KB per transaction
-        for tx in chunk {
-            batch.push_str(&format!("{:?}\n", tx));
+    // Write the opening bracket of the json array in the beginnning
+    writer
+        .write_all(b"[")
+        .await
+        .context("failed to write opening bracket")?;
+
+    for (i, chunk) in transactions.chunks(batch_size).enumerate() {
+        if i > 0 {
+            // Write a comma before each chunk except the first one
+            writer
+                .write_all(b",")
+                .await
+                .context("failed to write comma between chunks")?;
         }
+
+        let json_batch = json!(chunk.iter().map(|tx| json!(tx)).collect::<Vec<_>>());
+
+        // Load batch as json_string
+        let json_string = serde_json::to_string(&json_batch)
+            .context("failed to serialize transactions to JSON")?;
+
+        // Make json_string an object
+        let json_string = json_string.trim_start_matches('[').trim_end_matches(']');
+
         writer
-            .write_all(batch.as_bytes())
+            .write_all(json_string.as_bytes())
             .await
-            .context("Failed to write transaction batch to file")?;
+            .context("failed to write transaction batch to file")?;
     }
+
+    // Add the closing bracket of the json array at the end
+    writer
+        .write_all(b"]")
+        .await
+        .context("failed to write closing bracket")?;
 
     writer
         .flush()
         .await
-        .context("Failed to flush transaction data to file")?;
+        .context("failed to flush transaction data to file")?;
     Ok(())
 }
-
 // Helper function to decode a Base58 signature to a Solana Signature
 fn decode_base58_to_signature(base58sig: &str) -> Option<Signature> {
     // Decode the Base58 string into a Vec<u8>
