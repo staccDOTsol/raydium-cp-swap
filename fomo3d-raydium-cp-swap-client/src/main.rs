@@ -12,12 +12,14 @@ use mpl_token_metadata::types::Key;
 use rand::seq::SliceRandom;
 use raydium_cp_swap::states::{pool, PoolState};
 use raydium_cp_swap::{curve::constant_product::ConstantProductCurve, states::AmmConfig};
-use serde_json::from_str;
+use solana_sdk::instruction::InstructionError;
+use serde_json::{from_str, Value};
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::{rpc_client::RpcClient, rpc_config::RpcTransactionConfig};
 use solana_program_runtime::compute_budget;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
+use solana_sdk::transaction::TransactionError;
 use solana_sdk::program_pack::Pack;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_sdk::{
@@ -26,7 +28,8 @@ use solana_sdk::{
     signature::{Keypair, Signature, Signer},
     transaction::Transaction,
 };
-use solana_transaction_status::UiTransactionEncoding;
+use solana_transaction_status::{UiTransactionStatusMeta, UiInnerInstructions, UiTransactionTokenBalance, UiLoadedAddresses};
+use  solana_account_decoder::parse_token::UiTokenAmount;
 use spl_associated_token_account::get_associated_token_address_with_program_id;
 use std::ops::Add;
 use std::rc::Rc;
@@ -44,7 +47,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
-    EncodedConfirmedTransactionWithStatusMeta, UiMessage, UiParsedMessage, EncodedTransaction, UiTransaction, UiTransactionStatusMeta,
+    EncodedConfirmedTransactionWithStatusMeta, UiMessage, UiParsedMessage, EncodedTransaction, UiTransaction,
     UiInstruction,
     UiParsedInstruction,
     UiAddressTableLookup,
@@ -292,13 +295,75 @@ pub enum MyTransactionError {
     UnbalancedTransaction,
 }
 
+impl From<MyTransactionError> for TransactionError {
+    fn from(my_err: MyTransactionError) -> Self {
+        match my_err {
+            MyTransactionError::AccountInUse => TransactionError::AccountInUse,
+            MyTransactionError::AccountLoadedTwice => TransactionError::AccountLoadedTwice,
+            MyTransactionError::AccountNotFound => TransactionError::AccountNotFound,
+            MyTransactionError::ProgramAccountNotFound => TransactionError::ProgramAccountNotFound,
+            MyTransactionError::InsufficientFundsForFee => TransactionError::InsufficientFundsForFee,
+            MyTransactionError::InvalidAccountForFee => TransactionError::InvalidAccountForFee,
+            MyTransactionError::AlreadyProcessed => TransactionError::AlreadyProcessed,
+            MyTransactionError::BlockhashNotFound => TransactionError::BlockhashNotFound,
+            MyTransactionError::InstructionError(ix, err) => TransactionError::InstructionError(ix, err),
+            MyTransactionError::CallChainTooDeep => TransactionError::CallChainTooDeep,
+            MyTransactionError::MissingSignatureForFee => TransactionError::MissingSignatureForFee,
+            MyTransactionError::InvalidAccountIndex => TransactionError::InvalidAccountIndex,
+            MyTransactionError::SignatureFailure => TransactionError::SignatureFailure,
+            MyTransactionError::InvalidProgramForExecution => TransactionError::InvalidProgramForExecution,
+            MyTransactionError::SanitizeFailure => TransactionError::SanitizeFailure,
+            MyTransactionError::ClusterMaintenance => TransactionError::ClusterMaintenance,
+            MyTransactionError::AccountBorrowOutstanding => TransactionError::AccountBorrowOutstanding,
+            MyTransactionError::WouldExceedMaxBlockCostLimit => TransactionError::WouldExceedMaxBlockCostLimit,
+            MyTransactionError::UnsupportedVersion => TransactionError::UnsupportedVersion,
+            MyTransactionError::InvalidWritableAccount => TransactionError::InvalidWritableAccount,
+            MyTransactionError::WouldExceedMaxAccountCostLimit => TransactionError::WouldExceedMaxAccountCostLimit,
+            MyTransactionError::WouldExceedAccountDataBlockLimit => TransactionError::WouldExceedAccountDataBlockLimit,
+            MyTransactionError::TooManyAccountLocks => TransactionError::TooManyAccountLocks,
+            MyTransactionError::AddressLookupTableNotFound => TransactionError::AddressLookupTableNotFound,
+            MyTransactionError::InvalidAddressLookupTableOwner => TransactionError::InvalidAddressLookupTableOwner,
+            MyTransactionError::InvalidAddressLookupTableData => TransactionError::InvalidAddressLookupTableData,
+            MyTransactionError::InvalidAddressLookupTableIndex => TransactionError::InvalidAddressLookupTableIndex,
+            MyTransactionError::InvalidRentPayingAccount => TransactionError::InvalidRentPayingAccount,
+            MyTransactionError::WouldExceedMaxVoteCostLimit => TransactionError::WouldExceedMaxVoteCostLimit,
+            MyTransactionError::WouldExceedAccountDataTotalLimit => TransactionError::WouldExceedAccountDataTotalLimit,
+            MyTransactionError::DuplicateInstruction(ix) => TransactionError::DuplicateInstruction(ix),
+            MyTransactionError::InsufficientFundsForRent { account_index } => {
+                TransactionError::InsufficientFundsForRent { account_index }
+            }
+            MyTransactionError::MaxLoadedAccountsDataSizeExceeded => TransactionError::MaxLoadedAccountsDataSizeExceeded,
+            MyTransactionError::InvalidLoadedAccountsDataSizeLimit => TransactionError::InvalidLoadedAccountsDataSizeLimit,
+            MyTransactionError::ResanitizationNeeded => TransactionError::ResanitizationNeeded,
+            MyTransactionError::ProgramExecutionTemporarilyRestricted { account_index } => {
+                TransactionError::ProgramExecutionTemporarilyRestricted { account_index }
+            }
+            MyTransactionError::UnbalancedTransaction => TransactionError::UnbalancedTransaction,
+        }
+    }
+}
+
 pub type MyTransactionResult<T> = std::result::Result<T, MyTransactionError>;
+
+fn convert_my_transaction_result<T>(result: MyTransactionResult<T>) -> Result<T, solana_sdk::transaction::TransactionError> {
+    result.map_err(TransactionError::from)  // Convert the error type
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiInnerInstructions {
     pub index: u8,
     pub instructions: Vec<MyUiInstruction>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum MyUiInstruction {
+    Compiled(MyUiCompiledInstruction),
+    Parsed(MyUiParsedInstruction),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiCompiledInstruction { pub program_id_index: u8, pub accounts: Vec<u8>, pub data: String, pub stack_height: Option<u32>, }
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiTransactionTokenBalance {
@@ -350,6 +415,8 @@ pub struct MyUiLoadedAddresses {
     pub readonly: Vec<String>,
 }
 
+
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiTransactionReturnData {
     pub program_id: String,
@@ -391,11 +458,16 @@ struct MyParsedAccount {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct MyUiParsedInstruction {
-    program_id: String,
-    accounts: Option<Vec<String>>,
-    data: Option<String>,
+pub enum MyUiParsedInstruction {
+    Parsed(MyParsedInstruction),
+    PartiallyDecoded(MyUiPartiallyDecodedInstruction),
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyParsedInstruction { pub program: String, pub program_id: String, pub parsed: Value, pub stack_height: Option<u32>, }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyUiPartiallyDecodedInstruction { pub program_id: String, pub accounts: Vec<String>, pub data: String, pub stack_height: Option<u32>, }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MyUiAddressTableLookup {
@@ -404,6 +476,54 @@ struct MyUiAddressTableLookup {
     readonly_indexes: Vec<u8>,
 }
 
+
+fn convert_loaded_addresses(
+    loaded_addresses: OptionSerializer<MyUiLoadedAddresses>
+) -> OptionSerializer<UiLoadedAddresses> {
+    match loaded_addresses {
+        OptionSerializer::Some(addresses) => {
+            OptionSerializer::Some(UiLoadedAddresses {
+                writable: addresses.writable,
+                readonly: addresses.readonly,
+            })
+        }
+        OptionSerializer::None => {
+            OptionSerializer::None
+        }
+        OptionSerializer::Skip => {
+            OptionSerializer::Skip
+        }
+    }
+}
+
+fn convert_token_balances(
+    balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>
+) -> OptionSerializer<Vec<UiTransactionTokenBalance>> {
+    match balances {
+        OptionSerializer::Some(vec_balances) => {
+            OptionSerializer::Some(vec_balances.into_iter().map(|balance| {
+                UiTransactionTokenBalance {
+                    account_index: balance.account_index,
+                    mint: balance.mint,
+                    ui_token_amount: UiTokenAmount {
+                        ui_amount: balance.ui_token_amount.ui_amount,
+                        decimals: balance.ui_token_amount.decimals,
+                        amount: balance.ui_token_amount.amount,
+                        ui_amount_string: balance.ui_token_amount.ui_amount_string,
+                    },
+                    owner: balance.owner,
+                    program_id: balance.program_id,
+                }
+            }).collect())
+        }
+        OptionSerializer::None => {
+            OptionSerializer::None
+        }
+        OptionSerializer::Skip => {
+            OptionSerializer::Skip
+        }
+    }
+}
 
 
 fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
@@ -417,12 +537,19 @@ fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
                 source: None,  // If `source` is needed, adapt the structure here
             }).collect(),
             recent_blockhash: my_tx.message.recent_blockhash,
-            instructions: my_tx.message.instructions.into_iter().map(|instr| UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
-                program_id: instr.program_id,
-                accounts: instr.accounts.unwrap(),  
-                data: instr.data.unwrap(),
-                stack_height: None,
-            }))).collect(),
+            instructions: my_tx.message.instructions.into_iter().map(|instr| {
+                // Convert instr to MyUiParsedInstruction::PartiallyDecoded first
+                if let MyUiParsedInstruction::PartiallyDecoded(decoded_instr) = instr {
+                    UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
+                        program_id: decoded_instr.program_id,
+                        accounts: decoded_instr.accounts,
+                        data: decoded_instr.data,
+                        stack_height: decoded_instr.stack_height,
+                    })) 
+                } else {
+                    panic!("Expected a PartiallyDecoded instruction");
+                }
+            }).collect(),
             address_table_lookups: my_tx.message.address_table_lookups.map(|lookups| {
                 lookups.into_iter().map(|lookup| UiAddressTableLookup {
                     account_key: lookup.account_key,
@@ -433,6 +560,37 @@ fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
         }),
     }
 }
+
+fn convert_my_ui_transaction_with_status_meta(
+    my_tx_with_meta: MyUiTransactionStatusMeta
+) -> UiTransactionStatusMeta {
+    let my_inner_instructions = match my_tx_with_meta.inner_instructions {
+        OptionSerializer::Some(instructions) => {
+            instructions
+        }
+        _ => {
+            panic!("Expected inner_instructions to be Some");
+        }
+    };
+    UiTransactionStatusMeta {
+            err: my_tx_with_meta.err.map(TransactionError::from), 
+            status: convert_my_transaction_result(my_tx_with_meta.status),
+            fee: my_tx_with_meta.fee,
+            pre_balances: my_tx_with_meta.pre_balances,
+            post_balances: my_tx_with_meta.post_balances,
+            inner_instructions: my_inner_instructions.into_iter().map(|inst| UiInnerInstructions {
+                index: inst.index,
+                instructions: inst.instructions.into_iter().map()}).collect(),
+            log_messages: OptionSerializer::none(),
+            pre_token_balances: convert_token_balances(my_tx_with_meta.pre_token_balances),
+            post_token_balances: convert_token_balances(my_tx_with_meta.post_token_balances),
+            rewards: OptionSerializer::none(),
+            loaded_addresses: convert_loaded_addresses(my_tx_with_meta.loaded_addresses),
+            return_data: OptionSerializer::none(),
+            compute_units_consumed: OptionSerializer::none(),
+        }
+    }
+
 
 fn convert_to_encoded_transaction(ui_tx: UiTransaction) -> EncodedTransaction {
     EncodedTransaction::Json(ui_tx)
