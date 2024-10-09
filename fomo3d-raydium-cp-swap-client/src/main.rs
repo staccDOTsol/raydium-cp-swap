@@ -28,7 +28,8 @@ use solana_sdk::{
     signature::{Keypair, Signature, Signer},
     transaction::Transaction,
 };
-use solana_transaction_status::{UiTransactionStatusMeta, UiInnerInstructions, UiTransactionTokenBalance, UiLoadedAddresses};
+use solana_transaction_status::parse_instruction::ParsedInstruction;
+use solana_transaction_status::{UiInnerInstructions, UiLoadedAddresses, UiParsedInstruction, UiTransactionStatusMeta, UiTransactionTokenBalance};
 use  solana_account_decoder::parse_token::UiTokenAmount;
 use spl_associated_token_account::get_associated_token_address_with_program_id;
 use std::ops::Add;
@@ -49,7 +50,6 @@ use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
     EncodedConfirmedTransactionWithStatusMeta, UiMessage, UiParsedMessage, EncodedTransaction, UiTransaction,
     UiInstruction,
-    UiParsedInstruction,
     UiAddressTableLookup,
     UiPartiallyDecodedInstruction,
 };
@@ -295,59 +295,9 @@ pub enum MyTransactionError {
     UnbalancedTransaction,
 }
 
-impl From<MyTransactionError> for TransactionError {
-    fn from(my_err: MyTransactionError) -> Self {
-        match my_err {
-            MyTransactionError::AccountInUse => TransactionError::AccountInUse,
-            MyTransactionError::AccountLoadedTwice => TransactionError::AccountLoadedTwice,
-            MyTransactionError::AccountNotFound => TransactionError::AccountNotFound,
-            MyTransactionError::ProgramAccountNotFound => TransactionError::ProgramAccountNotFound,
-            MyTransactionError::InsufficientFundsForFee => TransactionError::InsufficientFundsForFee,
-            MyTransactionError::InvalidAccountForFee => TransactionError::InvalidAccountForFee,
-            MyTransactionError::AlreadyProcessed => TransactionError::AlreadyProcessed,
-            MyTransactionError::BlockhashNotFound => TransactionError::BlockhashNotFound,
-            MyTransactionError::InstructionError(ix, err) => TransactionError::InstructionError(ix, err),
-            MyTransactionError::CallChainTooDeep => TransactionError::CallChainTooDeep,
-            MyTransactionError::MissingSignatureForFee => TransactionError::MissingSignatureForFee,
-            MyTransactionError::InvalidAccountIndex => TransactionError::InvalidAccountIndex,
-            MyTransactionError::SignatureFailure => TransactionError::SignatureFailure,
-            MyTransactionError::InvalidProgramForExecution => TransactionError::InvalidProgramForExecution,
-            MyTransactionError::SanitizeFailure => TransactionError::SanitizeFailure,
-            MyTransactionError::ClusterMaintenance => TransactionError::ClusterMaintenance,
-            MyTransactionError::AccountBorrowOutstanding => TransactionError::AccountBorrowOutstanding,
-            MyTransactionError::WouldExceedMaxBlockCostLimit => TransactionError::WouldExceedMaxBlockCostLimit,
-            MyTransactionError::UnsupportedVersion => TransactionError::UnsupportedVersion,
-            MyTransactionError::InvalidWritableAccount => TransactionError::InvalidWritableAccount,
-            MyTransactionError::WouldExceedMaxAccountCostLimit => TransactionError::WouldExceedMaxAccountCostLimit,
-            MyTransactionError::WouldExceedAccountDataBlockLimit => TransactionError::WouldExceedAccountDataBlockLimit,
-            MyTransactionError::TooManyAccountLocks => TransactionError::TooManyAccountLocks,
-            MyTransactionError::AddressLookupTableNotFound => TransactionError::AddressLookupTableNotFound,
-            MyTransactionError::InvalidAddressLookupTableOwner => TransactionError::InvalidAddressLookupTableOwner,
-            MyTransactionError::InvalidAddressLookupTableData => TransactionError::InvalidAddressLookupTableData,
-            MyTransactionError::InvalidAddressLookupTableIndex => TransactionError::InvalidAddressLookupTableIndex,
-            MyTransactionError::InvalidRentPayingAccount => TransactionError::InvalidRentPayingAccount,
-            MyTransactionError::WouldExceedMaxVoteCostLimit => TransactionError::WouldExceedMaxVoteCostLimit,
-            MyTransactionError::WouldExceedAccountDataTotalLimit => TransactionError::WouldExceedAccountDataTotalLimit,
-            MyTransactionError::DuplicateInstruction(ix) => TransactionError::DuplicateInstruction(ix),
-            MyTransactionError::InsufficientFundsForRent { account_index } => {
-                TransactionError::InsufficientFundsForRent { account_index }
-            }
-            MyTransactionError::MaxLoadedAccountsDataSizeExceeded => TransactionError::MaxLoadedAccountsDataSizeExceeded,
-            MyTransactionError::InvalidLoadedAccountsDataSizeLimit => TransactionError::InvalidLoadedAccountsDataSizeLimit,
-            MyTransactionError::ResanitizationNeeded => TransactionError::ResanitizationNeeded,
-            MyTransactionError::ProgramExecutionTemporarilyRestricted { account_index } => {
-                TransactionError::ProgramExecutionTemporarilyRestricted { account_index }
-            }
-            MyTransactionError::UnbalancedTransaction => TransactionError::UnbalancedTransaction,
-        }
-    }
-}
 
 pub type MyTransactionResult<T> = std::result::Result<T, MyTransactionError>;
 
-fn convert_my_transaction_result<T>(result: MyTransactionResult<T>) -> Result<T, solana_sdk::transaction::TransactionError> {
-    result.map_err(TransactionError::from)  // Convert the error type
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiInnerInstructions {
@@ -359,6 +309,8 @@ pub struct MyUiInnerInstructions {
 pub enum MyUiInstruction {
     Compiled(MyUiCompiledInstruction),
     Parsed(MyUiParsedInstruction),
+
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -414,8 +366,6 @@ pub struct MyUiLoadedAddresses {
     pub writable: Vec<String>,
     pub readonly: Vec<String>,
 }
-
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiTransactionReturnData {
@@ -474,6 +424,61 @@ struct MyUiAddressTableLookup {
     account_key: String,
     writable_indexes: Vec<u8>,
     readonly_indexes: Vec<u8>,
+}
+
+
+
+impl From<MyTransactionError> for TransactionError {
+    fn from(my_err: MyTransactionError) -> Self {
+        match my_err {
+            MyTransactionError::AccountInUse => TransactionError::AccountInUse,
+            MyTransactionError::AccountLoadedTwice => TransactionError::AccountLoadedTwice,
+            MyTransactionError::AccountNotFound => TransactionError::AccountNotFound,
+            MyTransactionError::ProgramAccountNotFound => TransactionError::ProgramAccountNotFound,
+            MyTransactionError::InsufficientFundsForFee => TransactionError::InsufficientFundsForFee,
+            MyTransactionError::InvalidAccountForFee => TransactionError::InvalidAccountForFee,
+            MyTransactionError::AlreadyProcessed => TransactionError::AlreadyProcessed,
+            MyTransactionError::BlockhashNotFound => TransactionError::BlockhashNotFound,
+            MyTransactionError::InstructionError(ix, err) => TransactionError::InstructionError(ix, err),
+            MyTransactionError::CallChainTooDeep => TransactionError::CallChainTooDeep,
+            MyTransactionError::MissingSignatureForFee => TransactionError::MissingSignatureForFee,
+            MyTransactionError::InvalidAccountIndex => TransactionError::InvalidAccountIndex,
+            MyTransactionError::SignatureFailure => TransactionError::SignatureFailure,
+            MyTransactionError::InvalidProgramForExecution => TransactionError::InvalidProgramForExecution,
+            MyTransactionError::SanitizeFailure => TransactionError::SanitizeFailure,
+            MyTransactionError::ClusterMaintenance => TransactionError::ClusterMaintenance,
+            MyTransactionError::AccountBorrowOutstanding => TransactionError::AccountBorrowOutstanding,
+            MyTransactionError::WouldExceedMaxBlockCostLimit => TransactionError::WouldExceedMaxBlockCostLimit,
+            MyTransactionError::UnsupportedVersion => TransactionError::UnsupportedVersion,
+            MyTransactionError::InvalidWritableAccount => TransactionError::InvalidWritableAccount,
+            MyTransactionError::WouldExceedMaxAccountCostLimit => TransactionError::WouldExceedMaxAccountCostLimit,
+            MyTransactionError::WouldExceedAccountDataBlockLimit => TransactionError::WouldExceedAccountDataBlockLimit,
+            MyTransactionError::TooManyAccountLocks => TransactionError::TooManyAccountLocks,
+            MyTransactionError::AddressLookupTableNotFound => TransactionError::AddressLookupTableNotFound,
+            MyTransactionError::InvalidAddressLookupTableOwner => TransactionError::InvalidAddressLookupTableOwner,
+            MyTransactionError::InvalidAddressLookupTableData => TransactionError::InvalidAddressLookupTableData,
+            MyTransactionError::InvalidAddressLookupTableIndex => TransactionError::InvalidAddressLookupTableIndex,
+            MyTransactionError::InvalidRentPayingAccount => TransactionError::InvalidRentPayingAccount,
+            MyTransactionError::WouldExceedMaxVoteCostLimit => TransactionError::WouldExceedMaxVoteCostLimit,
+            MyTransactionError::WouldExceedAccountDataTotalLimit => TransactionError::WouldExceedAccountDataTotalLimit,
+            MyTransactionError::DuplicateInstruction(ix) => TransactionError::DuplicateInstruction(ix),
+            MyTransactionError::InsufficientFundsForRent { account_index } => {
+                TransactionError::InsufficientFundsForRent { account_index }
+            }
+            MyTransactionError::MaxLoadedAccountsDataSizeExceeded => TransactionError::MaxLoadedAccountsDataSizeExceeded,
+            MyTransactionError::InvalidLoadedAccountsDataSizeLimit => TransactionError::InvalidLoadedAccountsDataSizeLimit,
+            MyTransactionError::ResanitizationNeeded => TransactionError::ResanitizationNeeded,
+            MyTransactionError::ProgramExecutionTemporarilyRestricted { account_index } => {
+                TransactionError::ProgramExecutionTemporarilyRestricted { account_index }
+            }
+            MyTransactionError::UnbalancedTransaction => TransactionError::UnbalancedTransaction,
+        }
+    }
+}
+
+
+fn convert_my_transaction_result<T>(result: MyTransactionResult<T>) -> Result<T, solana_sdk::transaction::TransactionError> {
+    result.map_err(TransactionError::from)  // Convert the error type
 }
 
 
@@ -564,13 +569,31 @@ fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
 fn convert_my_ui_transaction_with_status_meta(
     my_tx_with_meta: MyUiTransactionStatusMeta
 ) -> UiTransactionStatusMeta {
-    let my_inner_instructions = match my_tx_with_meta.inner_instructions {
-        OptionSerializer::Some(instructions) => {
-            instructions
-        }
-        _ => {
-            panic!("Expected inner_instructions to be Some");
-        }
+    let my_inner_instructions = if let(OptionSerializer::Some(my_inner_instructions)) = my_tx_with_meta.inner_instructions {
+            my_inner_instructions.into_iter().map(|inner_instr| { 
+                UiInnerInstructions {
+                    index: inner_instr.index,
+                    instructions: inner_instr.instructions.into_iter().map(|instr| {
+                        let result = if let MyUiInstruction::Parsed(MyUiParsedInstruction::Parsed(decoded_instr)) = instr {
+                            UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
+                                program_id: decoded_instr.program_id,
+                                program: decoded_instr.program,
+                                parsed: decoded_instr.parsed,
+                                stack_height: decoded_instr.stack_height,
+                            }))
+                        } else {
+                            UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
+                                program_id: String::new(),
+                                program: String::new(),
+                                parsed: Value::default(),
+                                stack_height: None,
+                            }))
+                        };
+                        result}).collect::<Vec<UiInstruction>>()
+                }
+    }).collect::<Vec<UiInnerInstructions>>()} 
+    else {
+        vec![]
     };
     UiTransactionStatusMeta {
             err: my_tx_with_meta.err.map(TransactionError::from), 
@@ -578,9 +601,7 @@ fn convert_my_ui_transaction_with_status_meta(
             fee: my_tx_with_meta.fee,
             pre_balances: my_tx_with_meta.pre_balances,
             post_balances: my_tx_with_meta.post_balances,
-            inner_instructions: my_inner_instructions.into_iter().map(|inst| UiInnerInstructions {
-                index: inst.index,
-                instructions: inst.instructions.into_iter().map()}).collect(),
+            inner_instructions: OptionSerializer::Some(my_inner_instructions),
             log_messages: OptionSerializer::none(),
             pre_token_balances: convert_token_balances(my_tx_with_meta.pre_token_balances),
             post_token_balances: convert_token_balances(my_tx_with_meta.post_token_balances),
@@ -1525,7 +1546,7 @@ fn generate_random_string() -> String {
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
+    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/new-cp-swap-txs");
     let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
     let payer = read_keypair_file(&pool_config.payer_path)?;
     let program_id = pool_config.raydium_cp_program;
@@ -1549,15 +1570,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 
                 let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
                 let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
-
+                let meta = convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
     // Convert UiTransaction to EncodedTransaction
                 let encoded_tx = convert_to_encoded_transaction(ui_tx);
                 if let encoded_transaction = encoded_tx {
-                    let meta = encoded_tx.meta.clone();
+                    let meta = meta.clone();
                     let mut instructions = parse_program_instruction(
                         program_id.to_string().as_str(),
                         encoded_transaction,
-                        meta,
+                        Some(meta),
                     )?;
 
                     instructions.reverse(); // Reverse the instructions vector
