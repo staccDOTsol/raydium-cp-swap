@@ -103,7 +103,7 @@ fn main() -> Result<()> {
 
             // Write the transactions to the file
             for tx in &txs {
-                if let Err(e) = writeln!(tx_file, "{:?}", tx) {
+                if let Err(e) = writeln!(tx_file, "{}", serde_json::to_string(&tx).unwrap()) {
                     eprintln!("Failed to write transaction to file for {}: {}", pubkey, e);
                     break;
                 }
@@ -111,28 +111,16 @@ fn main() -> Result<()> {
 
             let last_tx = txs.last().unwrap();
             match &last_tx.transaction.transaction {
-                EncodedTransaction::LegacyBinary(ref binary_string) => {
-                    println!("LegacyBinary: {}", binary_string);
-                }
-                EncodedTransaction::Binary(ref binary_string, ref encoding) => {
-                    println!("Binary: {}, Encoding: {:?}", binary_string, encoding);
-                }
-                EncodedTransaction::Json(ref ui_transaction) => {
-                    // Handle Json variant and set 'before' to the first signature
+                EncodedTransaction::Json(ui_transaction) => {
                     if let Some(first_signature) = ui_transaction.signatures.get(0) {
                         before = Some(first_signature.clone());
-                        // println!("First signature: {}", first_signature);
                     } else {
                         println!("No signatures available in the last transaction");
                     }
                 }
-                EncodedTransaction::Accounts(ref accounts_list) => {
-                    println!("Accounts: {:?}", accounts_list);
-                }
+                _ => println!("Unexpected transaction encoding"),
             }
-            // Set 'before' to the signature of the last transaction for pagination
-            // before = txs.last().map(|tx| tx.transaction.[0].clone());
-            // If we fetched fewer than 1000 transactions, stop the iteration
+
             println!("Fetched {} transactions for {}", tx_count, pubkey);
 
             if tx_count < 1000 {
@@ -147,19 +135,15 @@ fn main() -> Result<()> {
 }
 
 fn decode_base58_to_signature(base58sig: &str) -> Option<Signature> {
-    // Decode the Base58 string into a Vec<u8>
     let decoded_bytes = bs58::decode(base58sig).into_vec().ok()?;
 
-    // Ensure the decoded byte length matches SIGNATURE_BYTES
     if decoded_bytes.len() != SIGNATURE_BYTES {
         return None;
     }
 
-    // Convert Vec<u8> to [u8; SIGNATURE_BYTES]
     let mut byte_array = [0u8; SIGNATURE_BYTES];
     byte_array.copy_from_slice(&decoded_bytes);
 
-    // Create a Signature object from the byte array
     Some(Signature::from(byte_array))
 }
 

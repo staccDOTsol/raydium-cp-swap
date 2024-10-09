@@ -1544,10 +1544,59 @@ fn generate_random_string() -> String {
         .collect()
 }
 
+fn parse_raydium_command(instruction: &Value) -> Option<RaydiumCpCommands> {
+    let program_id = instruction["programId"].as_str()?;
+    let data = instruction["data"].as_str()?;
+    let accounts = instruction["accounts"].as_array()?;
 
+    // Parse the instruction data
+    let (tag, rest) = data.split_at(8);
+    let tag = u64::from_str_radix(tag, 16).ok()?;
+    match tag {
+        0 => Some(RaydiumCpCommands::InitializePool {
+            mint0: Pubkey::default(),
+            mint1: Pubkey::default(),
+            init_amount_0: 0,
+            init_amount_1: 0,
+            open_time: 0,
+            symbol: String::new(),
+            uri: String::new(),
+            name: String::new(),
+            amm_config_index: 0,
+        }),
+        1 => Some(RaydiumCpCommands::SwapBaseIn {
+            pool_id: Pubkey::default(),
+            user_input_token: Pubkey::default(),
+            user_input_amount: 0,
+        }),
+        2 => Some(RaydiumCpCommands::Deposit {
+            pool_id: Pubkey::default(),
+            lp_token_amount: 0,
+        }),
+        3 => Some(RaydiumCpCommands::Withdraw {
+            user_lp_token: Pubkey::default(),
+            pool_id: Pubkey::default(),
+            lp_token_amount: 0,
+        }),
+        4 => Some(RaydiumCpCommands::InitializeAmmConfig {
+            index: 0,
+            token_0_creator_rate: 0,
+            token_1_lp_rate: 0,
+            token_0_lp_rate: 0,
+            token_1_creator_rate: 0,
+        }),
+        5 => Some(RaydiumCpCommands::SwapBaseOut {
+            pool_id: Pubkey::default(),
+            user_input_token: Pubkey::default(),
+            amount_out_less_fee: 0,
+        }),
+        // Add more cases as needed
+        _ => None,
+    }
+}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/new-cp-swap-txs");
-    let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
+    let dir_path = Path::new("/Users/jarettdunn/audit/cp-swap-txs");
+    let pool_config = load_cfg(&"/Users/jarettdunn/audit/client_config.ini".to_string())?;
     let payer = read_keypair_file(&pool_config.payer_path)?;
     let program_id = pool_config.raydium_cp_program;
     let rpc_client =
@@ -1565,36 +1614,87 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             for line in reader.lines() {
                 let line = line?;
-                // Process each line here
-                println!("Processing line: {:?}", line);
                 
-                let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
-                let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
-                let meta = convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
-    // Convert UiTransaction to EncodedTransaction
-                let encoded_tx = convert_to_encoded_transaction(ui_tx);
-                if let encoded_transaction = encoded_tx {
-                    let meta = meta.clone();
-                    let mut instructions = parse_program_instruction(
-                        program_id.to_string().as_str(),
-                        encoded_transaction,
-                        Some(meta),
-                    )?;
+                let element: Value = match serde_json::from_str(&line) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        println!("Error: {:?}", e);
+                        continue;
+                    }
+                };
 
-                    instructions.reverse(); // Reverse the instructions vector
+                let transaction = match element.get("transaction") {
+                    Some(tx) => tx,
+                    None => {
+                        println!("Error: missing 'transaction' field");
+                        continue;
+                    }
+                };
 
-                    for instruction in instructions {
-                        if let raydium_command = instruction.to_raydium_cp_commands() {
-                            execute_raydium_command(
-                                &rpc_client,
-                                &pool_config,
-                                &payer,
-                                &raydium_command,
-                                &mut mint_account_owner_cache,
-                            )?;
+                let message = match transaction.get("message") {
+                    Some(msg) => msg,
+                    None => {
+                        println!("Error: missing 'message' field in transaction");
+                        continue;
+                    }
+                };
+
+                let instructions = match message.get("instructions") {
+                    Some(Value::Array(instr)) => instr,
+                    _ => {
+                        println!("Error: 'instructions' is not an array or is missing");
+                        continue;
+                    }
+                };
+
+                for (index, instruction) in instructions.iter().enumerate() {
+                    println!("Processing instruction {}", index);
+                    if let Some(program_id) = instruction.get("programId") {
+                        println!("Program ID: {}", program_id);
+                        if program_id == "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" {
+                            println!("Raydium instruction detected");
+                            if let Some(data) = instruction.get("data") {
+                                println!("Parsing Raydium command");
+                                let raydium_command = parse_raydium_command(data);
+                                if let Some(command) = raydium_command {
+                                    println!("Executing Raydium command: {:?}", command);
+                                    execute_raydium_command(
+                                        &rpc_client,
+                                        &pool_config,
+                                        &payer,
+                                        &command,
+                                        &mut mint_account_owner_cache,
+                                    )?;
+                                    println!("Raydium command executed successfully");
+                                } else {
+                                    println!("Failed to parse Raydium command");
+                                }
+                            } else {
+                                println!("No data field found in Raydium instruction");
+                            }
+                        } else {
+                            println!("Not a Raydium instruction");
                         }
+                    } else {
+                        println!("No program ID found for instruction {}", index);
                     }
                 }
+                
+                // Add some additional processing here
+                println!("Processed {} instructions", instructions.len());
+                
+                // You could add more detailed logging
+                for (index, instruction) in instructions.iter().enumerate() {
+                    if let Some(program_id) = instruction.get("programId") {
+                        println!("Instruction {}: Program ID = {}", index, program_id);
+                    }
+                }
+                
+                // Or perform some analysis on the instructions
+                let raydium_instruction_count = instructions.iter()
+                    .filter(|instr| instr.get("programId") == Some(&Value::String("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".to_string())))
+                    .count();
+                println!("Number of Raydium instructions: {}", raydium_instruction_count);
             }
         }
     }
