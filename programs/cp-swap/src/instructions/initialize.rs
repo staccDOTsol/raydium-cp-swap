@@ -167,7 +167,7 @@ pub struct Initialize<'info> {
 pub struct InitializeMetadata<'info> {
     #[account(
         mut,
-        constraint = creator.key() == amm_config.fund_owner 
+        constraint = creator.key() == pool_state.load()?.pool_creator 
     )]
     pub creator: Signer<'info>,
     /// CHECK: This is not dangerous because we don't read or write from this account
