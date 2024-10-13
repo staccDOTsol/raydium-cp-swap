@@ -50,7 +50,8 @@ async fn main() -> Result<()> {
     }
 
     // Read public keys from file
-    let pubkeys = read_public_keys(CP_SWAP_PUBLICKEYS, 1500).await?;
+    // let pubkeys = read_public_keys(CP_SWAP_PUBLICKEYS, 1500).await?;
+    let pubkeys = vec![Pubkey::from_str("E9Cu7yCAg8WyBw79K5TiC2MRuk59D8gZcWGYjJC8bLzA")?];
 
     // Create a semaphore to limit concurrent requests
     let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS));
