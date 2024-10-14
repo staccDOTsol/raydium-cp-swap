@@ -162,8 +162,13 @@ async fn fetch_all_signatures(client: &RpcClient, pubkey: &Pubkey) -> Result<Vec
             break;
         }
 
-        all_signatures.extend(signatures.iter().map(|sig| sig.signature.clone()));
-
+        all_signatures.extend(
+            signatures
+                .iter()
+                .filter(|sig| sig.err.is_none())
+                .map(|sig| sig.signature.clone())
+        );
+        
         before = signatures
             .last()
             .map(|sig| decode_base58_to_signature(&sig.signature).unwrap());
