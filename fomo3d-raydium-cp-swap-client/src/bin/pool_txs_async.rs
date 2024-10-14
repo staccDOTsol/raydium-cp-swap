@@ -7,13 +7,11 @@ use serde_json::json;
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_client::rpc_client::GetConfirmedSignaturesForAddress2Config;
 use solana_client::rpc_config::RpcTransactionConfig;
-use solana_program::pubkey;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
 use std::fs::create_dir_all;
 use std::path::Path;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -168,7 +166,7 @@ async fn fetch_all_signatures(client: &RpcClient, pubkey: &Pubkey) -> Result<Vec
                 .filter(|sig| sig.err.is_none())
                 .map(|sig| sig.signature.clone())
         );
-        
+
         before = signatures
             .last()
             .map(|sig| decode_base58_to_signature(&sig.signature).unwrap());
