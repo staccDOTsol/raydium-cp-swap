@@ -6,7 +6,7 @@ use anchor_spl::{
     associated_token::{self, AssociatedToken},
     token_interface::TokenAccount,
 };
-use raydium_cp_swap::{states::{AmmConfig, PoolState, AMM_CONFIG_SEED, OBSERVATION_SEED, POOL_SEED, POOL_VAULT_SEED}, AUTH_SEED};
+use raydium_cp_swap::{curve::{AMM, DEFAULT_TOKEN_RESERVES, DEFAULT_VIRTUAL_SOL_RESERVE, DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE, DEFUALT_VIRTUAL_TOKEN_RESERVE}, states::{AmmConfig, PoolState, AMM_CONFIG_SEED, OBSERVATION_SEED, POOL_SEED, POOL_VAULT_SEED}, utils::U128, AUTH_SEED};
 use solana_sdk::{instruction::AccountMeta, sysvar::instructions};
 use spl_token_2022::{extension::StateWithExtensionsMut, state::Mint};
 
@@ -128,6 +128,8 @@ impl CpSwapTest {
         amm_config_cookie: &AmmCookie,
         token_0_mint: &MintCookie,
         token_1_mint: &MintCookie,
+        init_amount_0: u64,
+        init_amount_1: u64,
     ) -> Result<PoolCookie, BanksClientError> {
         let (pool_account_key, pool_bump) = Pubkey::find_program_address(
             &[
@@ -171,6 +173,12 @@ impl CpSwapTest {
             &self.program_id,
         );
 
+        let liquidity = U128::from(init_amount_0)
+        .checked_mul(U128::from(init_amount_1))
+        .unwrap()
+        .integer_sqrt()
+        .as_u64();
+
         Ok(PoolCookie {
             address: pool_account_key,
             account: PoolState {
@@ -197,14 +205,20 @@ impl CpSwapTest {
                 },
                 pool_creator: self.bench.payer.pubkey(),
                 lp_mint_decimals: 9,
-                lp_supply: ,
+                lp_supply: liquidity,
                 protocol_fees_token_0: 0,
                 protocol_fees_token_1: 0,
                 fund_fees_token_0: 0,
                 fund_fees_token_1: 0,
-                open_time: ,
+                open_time: self.bench.get_clock().await.unix_timestamp as u64,
                 recent_epoch: self.bench.get_clock().await.epoch,
-                amm: ,
+                amm: AMM::new(
+                    DEFAULT_VIRTUAL_SOL_RESERVE,
+                    DEFUALT_VIRTUAL_TOKEN_RESERVE,
+                    0,
+                    DEFAULT_TOKEN_RESERVES,
+                    DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE,
+                ),
                 padding: [0u64; 31],
             },
         })
