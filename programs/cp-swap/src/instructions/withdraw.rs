@@ -206,7 +206,7 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        token_0_amount,
+        receive_token_0_amount,
         ctx.accounts.vault_0_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
@@ -221,7 +221,7 @@ pub fn withdraw(
         } else {
             ctx.accounts.token_program_2022.to_account_info()
         },
-        token_1_amount,
+        receive_token_1_amount,
         ctx.accounts.vault_1_mint.decimals,
         &[&[crate::AUTH_SEED.as_bytes(), &[pool_state.auth_bump]]],
     )?;
