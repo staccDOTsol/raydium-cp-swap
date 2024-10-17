@@ -7,6 +7,8 @@ use hex;
 use raydium_cp_swap::instruction;
 use raydium_cp_swap::states::*;
 use regex::Regex;
+use solana_transaction_status::UiInstruction;
+use solana_transaction_status::UiParsedInstruction;
 use solana_transaction_status::{
     option_serializer::OptionSerializer, EncodedTransaction, UiTransactionStatusMeta,
 };
@@ -237,19 +239,17 @@ pub fn parse_program_instruction(
 ) -> Result<Vec<ChainInstructions>, ClientError> {
     let mut chain_instructions = Vec::new();
 
-    let ui_raw_msg = match encoded_transaction {
+    let ui_parsed_message = match encoded_transaction {
         solana_transaction_status::EncodedTransaction::Json(ui_tx) => match ui_tx.message {
-            solana_transaction_status::UiMessage::Raw(ui_raw_msg) => ui_raw_msg,
-            _ => solana_transaction_status::UiRawMessage {
-                header: solana_sdk::message::MessageHeader::default(),
+            solana_transaction_status::UiMessage::Parsed(ui_parsed_message) => ui_parsed_message,
+            _ => solana_transaction_status::UiParsedMessage {
                 account_keys: Vec::new(),
                 recent_blockhash: "".to_string(),
                 instructions: Vec::new(),
                 address_table_lookups: None,
             },
         },
-        _ => solana_transaction_status::UiRawMessage {
-            header: solana_sdk::message::MessageHeader::default(),
+        _ => solana_transaction_status::UiParsedMessage {
             account_keys: Vec::new(),
             recent_blockhash: "".to_string(),
             instructions: Vec::new(),
@@ -257,81 +257,61 @@ pub fn parse_program_instruction(
         },
     };
 
+    println!("{:?}", meta);
+
     if let Some(meta) = meta {
-        let mut account_keys = ui_raw_msg.account_keys;
+        let mut account_keys = ui_parsed_message.account_keys;
         let meta = meta.clone();
-        match meta.loaded_addresses {
-            OptionSerializer::Some(addresses) => {
-                let mut writeable_address = addresses.writable;
-                let mut readonly_address = addresses.readonly;
-                account_keys.append(&mut writeable_address);
-                account_keys.append(&mut readonly_address);
-            }
-            _ => {}
-        }
-        let program_index = account_keys
-            .iter()
-            .position(|r| r == self_program_str)
-            .unwrap();
 
-        for (i, ui_compiled_instruction) in ui_raw_msg.instructions.iter().enumerate() {
-            if (ui_compiled_instruction.program_id_index as usize) == program_index {
-                let out_put = format!("instruction #{}", i + 1);
-                println!("{}", out_put.gradient(Color::Green));
-                let accounts: Vec<String> = ui_compiled_instruction
-                    .accounts
-                    .iter()
-                    .map(|&index| account_keys[index as usize].clone())
-                    .collect();
 
-                match handle_program_instruction(
-                    &ui_compiled_instruction.data,
-                    InstructionDecodeType::Base58,
-                    accounts,
-                ) {
-                    Ok(chain_instruction) => {
-                        chain_instructions.push(chain_instruction);
-                    }
-                    Err(e) => {
-                        eprintln!("Error decoding instruction: {}", e);
-                        continue;
+
+        for (i, ui_compiled_instruction) in ui_parsed_message.instructions.iter().enumerate() {
+            if let UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(ix)) = ui_compiled_instruction {
+                if (ix.program_id) == self_program_str {
+                    let out_put = format!("instruction #{}", i + 1);
+                    println!("{}", out_put.gradient(Color::Green));
+                    let accounts: Vec<String> = ix.accounts.iter().cloned().collect();
+                    match handle_program_instruction(
+                        &ix.data,
+                        InstructionDecodeType::Base58,
+                        accounts,
+                    ) {
+                        Ok(chain_instruction) => {
+                            chain_instructions.push(chain_instruction);
+                        }
+                        Err(e) => {
+                            eprintln!("Error decoding instruction: {}", e);
+                            continue;
+                        }
                     }
                 }
-            }
+            } 
         }
 
         if let OptionSerializer::Some(inner_instructions) = meta.inner_instructions {
             for inner in inner_instructions {
                 for (i, instruction) in inner.instructions.iter().enumerate() {
-                    if let solana_transaction_status::UiInstruction::Compiled(
-                        ui_compiled_instruction,
-                    ) = instruction
-                    {
-                        if (ui_compiled_instruction.program_id_index as usize) == program_index {
-                            let out_put =
-                                format!("inner_instruction #{}.{}", inner.index + 1, i + 1);
+                    if let UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(ix)) = instruction {
+                        if (ix.program_id) == self_program_str {
+                            let out_put = format!("instruction #{}", i + 1);
                             println!("{}", out_put.gradient(Color::Green));
-                            let accounts: Vec<String> = ui_compiled_instruction
-                                .accounts
-                                .iter()
-                                .map(|&index| account_keys[index as usize].clone())
-                                .collect();
-
+                            let accounts: Vec<String> = ix.accounts.iter().cloned().collect();
                             match handle_program_instruction(
-                                &ui_compiled_instruction.data,
+                                &ix.data,
                                 InstructionDecodeType::Base58,
+
                                 accounts,
                             ) {
                                 Ok(chain_instruction) => {
                                     chain_instructions.push(chain_instruction);
                                 }
                                 Err(e) => {
-                                    eprintln!("Error decoding inner instruction: {}", e);
+                                    eprintln!("Error decoding instruction: {}", e);
                                     continue;
                                 }
                             }
                         }
-                    }
+                    } 
                 }
             }
         }

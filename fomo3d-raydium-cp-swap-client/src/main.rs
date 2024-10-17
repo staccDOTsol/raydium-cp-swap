@@ -29,7 +29,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use solana_transaction_status::parse_instruction::ParsedInstruction;
-use solana_transaction_status::{UiInnerInstructions, UiLoadedAddresses, UiParsedInstruction, UiTransactionStatusMeta, UiTransactionTokenBalance};
+use solana_transaction_status::{UiCompiledInstruction, UiInnerInstructions, UiLoadedAddresses, UiParsedInstruction, UiTransactionStatusMeta, UiTransactionTokenBalance};
 use  solana_account_decoder::parse_token::UiTokenAmount;
 use spl_associated_token_account::get_associated_token_address_with_program_id;
 use std::ops::Add;
@@ -88,51 +88,25 @@ struct MyEncodedTransactionWithStatusMeta {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiTransactionStatusMeta {
-    pub err: Option<MyTransactionError>,
-    pub status: MyTransactionResult<()>, // This field is deprecated
     pub fee: u64,
     pub pre_balances: Vec<u64>,
     pub post_balances: Vec<u64>,
-    #[serde(
-        default = "OptionSerializer::none",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub inner_instructions: OptionSerializer<Vec<MyUiInnerInstructions>>,
-    #[serde(
-        default = "OptionSerializer::none",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub log_messages: OptionSerializer<Vec<String>>,
-    #[serde(
-        default = "OptionSerializer::none",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub pre_token_balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>,
-    #[serde(
-        default = "OptionSerializer::none",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub post_token_balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>,
-    #[serde(
-        default = "OptionSerializer::none",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub rewards: OptionSerializer<MyRewards>,
-    #[serde(
-        default = "OptionSerializer::skip",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub loaded_addresses: OptionSerializer<MyUiLoadedAddresses>,
-    #[serde(
-        default = "OptionSerializer::skip",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub return_data: OptionSerializer<MyUiTransactionReturnData>,
-    #[serde(
-        default = "OptionSerializer::skip",
-        skip_serializing_if = "OptionSerializer::should_skip"
-    )]
-    pub compute_units_consumed: OptionSerializer<u64>,
+    
+    pub inner_instructions: Option<Vec<MyUiInnerInstructions>>,
+    
+    pub log_messages: Option<Vec<String>>,
+    
+    pub pre_token_balances: Option<Vec<MyUiTransactionTokenBalance>>,
+    
+    pub post_token_balances: Option<Vec<MyUiTransactionTokenBalance>>,
+    
+    pub rewards: Option<MyRewards>,
+   
+    pub loaded_addresses: Option<MyUiLoadedAddresses>,
+    
+    pub return_data: Option<MyUiTransactionReturnData>,
+   
+    pub compute_units_consumed: Option<u64>,
 }
 
 #[derive(Error, Debug, Serialize, Deserialize)]
@@ -306,14 +280,6 @@ pub struct MyUiInnerInstructions {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum MyUiInstruction {
-    Compiled(MyUiCompiledInstruction),
-    Parsed(MyUiParsedInstruction),
-
-
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiCompiledInstruction { pub program_id_index: u8, pub accounts: Vec<u8>, pub data: String, pub stack_height: Option<u32>, }
 
 
@@ -386,6 +352,8 @@ pub enum MyUiReturnDataEncoding {
 // }
 
 
+
+
 #[derive(Debug, Serialize, Deserialize)]
 struct MyUiTransaction {
     signatures: Vec<String>,
@@ -396,7 +364,7 @@ struct MyUiTransaction {
 struct MyUiParsedMessage {
     account_keys: Vec<MyParsedAccount>,
     recent_blockhash: String,
-    instructions: Vec<MyUiParsedInstruction>,
+    instructions: Vec<MyUiInstruction>,
     address_table_lookups: Option<Vec<MyUiAddressTableLookup>>,
 }
 
@@ -412,6 +380,13 @@ pub enum MyUiParsedInstruction {
     Parsed(MyParsedInstruction),
     PartiallyDecoded(MyUiPartiallyDecodedInstruction),
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum MyUiInstruction {
+    Compiled(MyUiCompiledInstruction),
+    Parsed(MyUiParsedInstruction)
+}
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyParsedInstruction { pub program: String, pub program_id: String, pub parsed: Value, pub stack_height: Option<u32>, }
@@ -483,29 +458,26 @@ fn convert_my_transaction_result<T>(result: MyTransactionResult<T>) -> Result<T,
 
 
 fn convert_loaded_addresses(
-    loaded_addresses: OptionSerializer<MyUiLoadedAddresses>
+    loaded_addresses: Option<MyUiLoadedAddresses>
 ) -> OptionSerializer<UiLoadedAddresses> {
     match loaded_addresses {
-        OptionSerializer::Some(addresses) => {
+        Some(addresses) => {
             OptionSerializer::Some(UiLoadedAddresses {
                 writable: addresses.writable,
                 readonly: addresses.readonly,
             })
         }
-        OptionSerializer::None => {
+        None => {
             OptionSerializer::None
-        }
-        OptionSerializer::Skip => {
-            OptionSerializer::Skip
         }
     }
 }
 
 fn convert_token_balances(
-    balances: OptionSerializer<Vec<MyUiTransactionTokenBalance>>
+    balances: Option<Vec<MyUiTransactionTokenBalance>>
 ) -> OptionSerializer<Vec<UiTransactionTokenBalance>> {
     match balances {
-        OptionSerializer::Some(vec_balances) => {
+        Some(vec_balances) => {
             OptionSerializer::Some(vec_balances.into_iter().map(|balance| {
                 UiTransactionTokenBalance {
                     account_index: balance.account_index,
@@ -521,11 +493,8 @@ fn convert_token_balances(
                 }
             }).collect())
         }
-        OptionSerializer::None => {
+        None => {
             OptionSerializer::None
-        }
-        OptionSerializer::Skip => {
-            OptionSerializer::Skip
         }
     }
 }
@@ -544,16 +513,31 @@ fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
             recent_blockhash: my_tx.message.recent_blockhash,
             instructions: my_tx.message.instructions.into_iter().map(|instr| {
                 // Convert instr to MyUiParsedInstruction::PartiallyDecoded first
-                if let MyUiParsedInstruction::PartiallyDecoded(decoded_instr) = instr {
+                let result = if let MyUiInstruction::Parsed(MyUiParsedInstruction::Parsed(decoded_instr)) = instr {
+                    UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
+                        program_id: decoded_instr.program_id,
+                        program: decoded_instr.program,
+                        parsed: decoded_instr.parsed,
+                        stack_height: decoded_instr.stack_height,
+                    }))
+                } else if let MyUiInstruction::Parsed(MyUiParsedInstruction::PartiallyDecoded(decoded_instr)) = instr {
                     UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
                         program_id: decoded_instr.program_id,
                         accounts: decoded_instr.accounts,
                         data: decoded_instr.data,
                         stack_height: decoded_instr.stack_height,
-                    })) 
+                    }))
+                } else if let MyUiInstruction::Compiled(decoded_instr) = instr {
+                    UiInstruction::Compiled(UiCompiledInstruction{
+                        program_id_index: decoded_instr.program_id_index,
+                        accounts: decoded_instr.accounts,
+                        data: decoded_instr.data,
+                        stack_height: decoded_instr.stack_height,
+                    })
                 } else {
-                    panic!("Expected a PartiallyDecoded instruction");
-                }
+                    panic!("Expected a Parsed instruction");
+                };
+                result
             }).collect(),
             address_table_lookups: my_tx.message.address_table_lookups.map(|lookups| {
                 lookups.into_iter().map(|lookup| UiAddressTableLookup {
@@ -569,7 +553,7 @@ fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
 fn convert_my_ui_transaction_with_status_meta(
     my_tx_with_meta: MyUiTransactionStatusMeta
 ) -> UiTransactionStatusMeta {
-    let my_inner_instructions = if let(OptionSerializer::Some(my_inner_instructions)) = my_tx_with_meta.inner_instructions {
+    let my_inner_instructions = if let(Some(my_inner_instructions)) = my_tx_with_meta.inner_instructions {
             my_inner_instructions.into_iter().map(|inner_instr| { 
                 UiInnerInstructions {
                     index: inner_instr.index,
@@ -581,23 +565,33 @@ fn convert_my_ui_transaction_with_status_meta(
                                 parsed: decoded_instr.parsed,
                                 stack_height: decoded_instr.stack_height,
                             }))
-                        } else {
-                            UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
-                                program_id: String::new(),
-                                program: String::new(),
-                                parsed: Value::default(),
-                                stack_height: None,
+                        } else if let MyUiInstruction::Parsed(MyUiParsedInstruction::PartiallyDecoded(decoded_instr)) = instr {
+                            UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
+                                program_id: decoded_instr.program_id,
+                                accounts: decoded_instr.accounts,
+                                data: decoded_instr.data,
+                                stack_height: decoded_instr.stack_height,
                             }))
+                        } else if let MyUiInstruction::Compiled(decoded_instr) = instr {
+                            UiInstruction::Compiled(UiCompiledInstruction{
+                                program_id_index: decoded_instr.program_id_index,
+                                accounts: decoded_instr.accounts,
+                                data: decoded_instr.data,
+                                stack_height: decoded_instr.stack_height,
+                            })
+                        } else {
+                            panic!("Expected a Parsed instruction");
                         };
-                        result}).collect::<Vec<UiInstruction>>()
+                        result
+                    }).collect::<Vec<UiInstruction>>()
                 }
     }).collect::<Vec<UiInnerInstructions>>()} 
     else {
         vec![]
     };
     UiTransactionStatusMeta {
-            err: my_tx_with_meta.err.map(TransactionError::from), 
-            status: convert_my_transaction_result(my_tx_with_meta.status),
+            err: None, 
+            status: Ok(()),
             fee: my_tx_with_meta.fee,
             pre_balances: my_tx_with_meta.pre_balances,
             post_balances: my_tx_with_meta.post_balances,
@@ -1544,59 +1538,10 @@ fn generate_random_string() -> String {
         .collect()
 }
 
-fn parse_raydium_command(instruction: &Value) -> Option<RaydiumCpCommands> {
-    let program_id = instruction["programId"].as_str()?;
-    let data = instruction["data"].as_str()?;
-    let accounts = instruction["accounts"].as_array()?;
 
-    // Parse the instruction data
-    let (tag, rest) = data.split_at(8);
-    let tag = u64::from_str_radix(tag, 16).ok()?;
-    match tag {
-        0 => Some(RaydiumCpCommands::InitializePool {
-            mint0: Pubkey::default(),
-            mint1: Pubkey::default(),
-            init_amount_0: 0,
-            init_amount_1: 0,
-            open_time: 0,
-            symbol: String::new(),
-            uri: String::new(),
-            name: String::new(),
-            amm_config_index: 0,
-        }),
-        1 => Some(RaydiumCpCommands::SwapBaseIn {
-            pool_id: Pubkey::default(),
-            user_input_token: Pubkey::default(),
-            user_input_amount: 0,
-        }),
-        2 => Some(RaydiumCpCommands::Deposit {
-            pool_id: Pubkey::default(),
-            lp_token_amount: 0,
-        }),
-        3 => Some(RaydiumCpCommands::Withdraw {
-            user_lp_token: Pubkey::default(),
-            pool_id: Pubkey::default(),
-            lp_token_amount: 0,
-        }),
-        4 => Some(RaydiumCpCommands::InitializeAmmConfig {
-            index: 0,
-            token_0_creator_rate: 0,
-            token_1_lp_rate: 0,
-            token_0_lp_rate: 0,
-            token_1_creator_rate: 0,
-        }),
-        5 => Some(RaydiumCpCommands::SwapBaseOut {
-            pool_id: Pubkey::default(),
-            user_input_token: Pubkey::default(),
-            amount_out_less_fee: 0,
-        }),
-        // Add more cases as needed
-        _ => None,
-    }
-}
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dir_path = Path::new("/Users/jarettdunn/audit/cp-swap-txs");
-    let pool_config = load_cfg(&"/Users/jarettdunn/audit/client_config.ini".to_string())?;
+    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
+    let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
     let payer = read_keypair_file(&pool_config.payer_path)?;
     let program_id = pool_config.raydium_cp_program;
     let rpc_client =
@@ -1606,95 +1551,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for entry in fs::read_dir(dir_path)? {
         let entry = entry?;
         let path = entry.path();
+
+        let mut all_instructions : Vec<ChainInstructions> = Vec::new();
         println!("Processing file: {:?}", entry);
         println!("Starting to process transactions");
         if path.extension().and_then(|s| s.to_str()) == Some("txt") {
             let file = File::open(path)?;
             let reader = BufReader::new(file);
-
             for line in reader.lines() {
                 let line = line?;
+                // Process each line here
+                // println!("the 2505th charachter is {}", line.get(10880..10900).unwrap());
                 
-                let element: Value = match serde_json::from_str(&line) {
-                    Ok(value) => value,
-                    Err(e) => {
-                        println!("Error: {:?}", e);
-                        continue;
-                    }
-                };
+                let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
+                let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
+                let meta = convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
+                 // Convert UiTransaction to EncodedTransaction
+                let encoded_tx = convert_to_encoded_transaction(ui_tx);
+                if let encoded_transaction = encoded_tx {
+                    let meta = meta.clone();
+                    let mut instructions = parse_program_instruction(
+                        program_id.to_string().as_str(),
+                        encoded_transaction,
+                        Some(meta),
+                    )?;
 
-                let transaction = match element.get("transaction") {
-                    Some(tx) => tx,
-                    None => {
-                        println!("Error: missing 'transaction' field");
-                        continue;
-                    }
-                };
+                    instructions.reverse(); // Reverse the instructions vector
 
-                let message = match transaction.get("message") {
-                    Some(msg) => msg,
-                    None => {
-                        println!("Error: missing 'message' field in transaction");
-                        continue;
-                    }
-                };
-
-                let instructions = match message.get("instructions") {
-                    Some(Value::Array(instr)) => instr,
-                    _ => {
-                        println!("Error: 'instructions' is not an array or is missing");
-                        continue;
-                    }
-                };
-
-                for (index, instruction) in instructions.iter().enumerate() {
-                    println!("Processing instruction {}", index);
-                    if let Some(program_id) = instruction.get("programId") {
-                        println!("Program ID: {}", program_id);
-                        if program_id == "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" {
-                            println!("Raydium instruction detected");
-                            if let Some(data) = instruction.get("data") {
-                                println!("Parsing Raydium command");
-                                let raydium_command = parse_raydium_command(data);
-                                if let Some(command) = raydium_command {
-                                    println!("Executing Raydium command: {:?}", command);
-                                    execute_raydium_command(
-                                        &rpc_client,
-                                        &pool_config,
-                                        &payer,
-                                        &command,
-                                        &mut mint_account_owner_cache,
-                                    )?;
-                                    println!("Raydium command executed successfully");
-                                } else {
-                                    println!("Failed to parse Raydium command");
-                                }
-                            } else {
-                                println!("No data field found in Raydium instruction");
-                            }
-                        } else {
-                            println!("Not a Raydium instruction");
-                        }
-                    } else {
-                        println!("No program ID found for instruction {}", index);
-                    }
+                    all_instructions.append(&mut instructions);
                 }
-                
-                // Add some additional processing here
-                println!("Processed {} instructions", instructions.len());
-                
-                // You could add more detailed logging
-                for (index, instruction) in instructions.iter().enumerate() {
-                    if let Some(program_id) = instruction.get("programId") {
-                        println!("Instruction {}: Program ID = {}", index, program_id);
-                    }
-                }
-                
-                // Or perform some analysis on the instructions
-                let raydium_instruction_count = instructions.iter()
-                    .filter(|instr| instr.get("programId") == Some(&Value::String("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C".to_string())))
-                    .count();
-                println!("Number of Raydium instructions: {}", raydium_instruction_count);
             }
         }
     }
