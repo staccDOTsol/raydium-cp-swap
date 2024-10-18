@@ -5,6 +5,7 @@ rust-version = "1.75.0"
 edition = "2021"
 license = "MIT"
 description = "Client for Raydium CP Swap" # Added description field
+default-run = "fomo3d-raydium-cp-swap-client"
 
 [[bin]]
 name = "pool_txs_async"
@@ -48,3 +49,4 @@ regex = "1.11.0"
 lazy_static = "1.5.0"
 hex = "0.4.3"
 futures = "0.3"
+thiserror = "1.0.64"
