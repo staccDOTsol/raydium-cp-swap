@@ -83,7 +83,7 @@ pub struct PoolState {
 }
 
 impl PoolState {
-    pub const LEN: usize = 8 + 10 * 32 + 1 * 5 + 8 * 7 + 8 * 31;
+    pub const LEN: usize =8 + std::mem::size_of::<PoolState>();
 
     pub fn initialize(
         &mut self,
