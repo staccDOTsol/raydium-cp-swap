@@ -2,6 +2,7 @@ pub mod program_test_bench;
 pub mod cp_swap_test;
 pub mod tools;
 pub mod utils;
+pub mod helpers;
 use std::{sync::Arc, sync::RwLock};
 use log::*;
 
