@@ -620,6 +620,11 @@ fn get_and_increment_index() -> u64 {
     current_index
 }
 
+fn get_index() -> u64 {
+    let index = GLOBAL_AMM_INDEX.lock().unwrap();
+    *index
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClientConfig {
     http_url: String,
@@ -770,8 +775,7 @@ impl ChainInstructions {
                 init_amount_0,
                 init_amount_1,
                 open_time,
-            } => {
-                let amm_config_index = get_and_increment_index(); // Use the global index here
+            } => { // Use the global index here
                 RaydiumCpCommands::InitializePool {
                     mint0: Pubkey::new_from_array(
                         bs58::decode(token_0_mint)
@@ -793,7 +797,7 @@ impl ChainInstructions {
                     symbol: String::new(),
                     uri: String::new(),
                     name: String::new(),
-                    amm_config_index,
+                    amm_config_index: get_index(),
                 }
             }
             ChainInstructions::Deposit {
@@ -1560,27 +1564,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 let line = line?;
+               
                 // Process each line here
-                // println!("the 2505th charachter is {}", line.get(10880..10900).unwrap());
-                
                 let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
                 let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
                 let meta = convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
                  // Convert UiTransaction to EncodedTransaction
                 let encoded_tx = convert_to_encoded_transaction(ui_tx);
-                if let encoded_transaction = encoded_tx {
-                    let meta = meta.clone();
-                    let mut instructions = parse_program_instruction(
-                        program_id.to_string().as_str(),
-                        encoded_transaction,
-                        Some(meta),
-                    )?;
+                let mut instructions = parse_program_instruction(
+                    program_id.to_string().as_str(),
+                    encoded_tx,
+                    Some(meta),
+                )?;
 
-                    instructions.reverse(); // Reverse the instructions vector
-
-                    all_instructions.append(&mut instructions);
-                }
+                all_instructions.append(&mut instructions);
+                
             }
+        }
+
+        if let Some(pos) = all_instructions.iter().position(|x| matches!(x, ChainInstructions::Initialize {..})) {
+            all_instructions.truncate(pos + 1);
+        }
+
+        let amm_config_index = get_and_increment_index();
+        all_instructions.push(ChainInstructions::CreateAmmConfig {
+            index: amm_config_index as u16,
+            trade_fee_rate: 6666,
+            protocol_fee_rate: 6666,
+            fund_fee_rate: 6666,
+            create_pool_fee: 6666,
+        } );
+        all_instructions.reverse();
+
+        println!("All instructions: {:?}", all_instructions);
+
+
+        for instruction in all_instructions {
+            let raydium_cp_command = instruction.to_raydium_cp_commands();
+            execute_raydium_command(
+                &rpc_client,
+                &pool_config,
+                &payer,
+                &raydium_cp_command,
+                &mut mint_account_owner_cache,
+            )?;
         }
     }
 
@@ -2414,3 +2441,7 @@ fn execute_raydium_command(
     }
     Ok(())
 }
+
+
+
+// turn chain instructions into raydium commands
