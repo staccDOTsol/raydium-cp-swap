@@ -12,15 +12,20 @@ use mpl_token_metadata::types::Key;
 use rand::seq::SliceRandom;
 use raydium_cp_swap::states::{pool, PoolState};
 use raydium_cp_swap::{curve::constant_product::ConstantProductCurve, states::AmmConfig};
-use solana_sdk::instruction::InstructionError;
 use serde_json::{from_str, Value};
+use solana_account_decoder::parse_token::UiTokenAmount;
 use solana_client::rpc_config::RpcSendTransactionConfig;
 use solana_client::{rpc_client::RpcClient, rpc_config::RpcTransactionConfig};
 use solana_program_runtime::compute_budget;
+use solana_program_test::{
+    tokio::{self, sync::Mutex},
+    BanksClient, ProgramTest, ProgramTestContext,
+};
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
-use solana_sdk::transaction::TransactionError;
+use solana_sdk::instruction::InstructionError;
 use solana_sdk::program_pack::Pack;
+use solana_sdk::transaction::TransactionError;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
@@ -29,14 +34,16 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use solana_transaction_status::parse_instruction::ParsedInstruction;
-use solana_transaction_status::{UiCompiledInstruction, UiInnerInstructions, UiLoadedAddresses, UiParsedInstruction, UiTransactionStatusMeta, UiTransactionTokenBalance};
-use  solana_account_decoder::parse_token::UiTokenAmount;
+use solana_transaction_status::{
+    UiCompiledInstruction, UiInnerInstructions, UiLoadedAddresses, UiParsedInstruction,
+    UiTransactionStatusMeta, UiTransactionTokenBalance,
+};
 use spl_associated_token_account::get_associated_token_address_with_program_id;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::ops::Add;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 
 mod instructions;
 use instructions::rpc::*;
@@ -46,31 +53,23 @@ use instructions::{amm_instructions::*, rpc};
 use lazy_static::lazy_static;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
+use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
-    EncodedConfirmedTransactionWithStatusMeta, UiMessage, UiParsedMessage, EncodedTransaction, UiTransaction,
-    UiInstruction,
-    UiAddressTableLookup,
-    UiPartiallyDecodedInstruction,
+    EncodedConfirmedTransactionWithStatusMeta, EncodedTransaction, UiAddressTableLookup,
+    UiInstruction, UiMessage, UiParsedMessage, UiPartiallyDecodedInstruction, UiTransaction,
 };
-use thiserror::Error;
-use solana_transaction_status::option_serializer::OptionSerializer;
 use spl_token_2022::{
     extension::StateWithExtensionsMut,
     state::{Account, Mint},
 };
 use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 pub type StringAmount = String;
 pub type StringDecimals = String;
-
-lazy_static! {
-    static ref GLOBAL_AMM_INDEX: Mutex<u64> = Mutex::new(0);
-}
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MyEncodedConfirmedTransactionWithStatusMeta {
@@ -91,21 +90,21 @@ pub struct MyUiTransactionStatusMeta {
     pub fee: u64,
     pub pre_balances: Vec<u64>,
     pub post_balances: Vec<u64>,
-    
+
     pub inner_instructions: Option<Vec<MyUiInnerInstructions>>,
-    
+
     pub log_messages: Option<Vec<String>>,
-    
+
     pub pre_token_balances: Option<Vec<MyUiTransactionTokenBalance>>,
-    
+
     pub post_token_balances: Option<Vec<MyUiTransactionTokenBalance>>,
-    
+
     pub rewards: Option<MyRewards>,
-   
+
     pub loaded_addresses: Option<MyUiLoadedAddresses>,
-    
+
     pub return_data: Option<MyUiTransactionReturnData>,
-   
+
     pub compute_units_consumed: Option<u64>,
 }
 
@@ -269,9 +268,7 @@ pub enum MyTransactionError {
     UnbalancedTransaction,
 }
 
-
 pub type MyTransactionResult<T> = std::result::Result<T, MyTransactionError>;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiInnerInstructions {
@@ -280,8 +277,12 @@ pub struct MyUiInnerInstructions {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MyUiCompiledInstruction { pub program_id_index: u8, pub accounts: Vec<u8>, pub data: String, pub stack_height: Option<u32>, }
-
+pub struct MyUiCompiledInstruction {
+    pub program_id_index: u8,
+    pub accounts: Vec<u8>,
+    pub data: String,
+    pub stack_height: Option<u32>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MyUiTransactionTokenBalance {
@@ -312,7 +313,7 @@ pub struct MyUiTokenAmount {
 pub struct MyReward {
     pub pubkey: String,
     pub lamports: i64,
-    pub post_balance: u64, 
+    pub post_balance: u64,
     pub reward_type: Option<MyRewardType>,
     pub commission: Option<u8>,
 }
@@ -351,9 +352,6 @@ pub enum MyUiReturnDataEncoding {
 //     Skip,
 // }
 
-
-
-
 #[derive(Debug, Serialize, Deserialize)]
 struct MyUiTransaction {
     signatures: Vec<String>,
@@ -384,15 +382,24 @@ pub enum MyUiParsedInstruction {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MyUiInstruction {
     Compiled(MyUiCompiledInstruction),
-    Parsed(MyUiParsedInstruction)
+    Parsed(MyUiParsedInstruction),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MyParsedInstruction {
+    pub program: String,
+    pub program_id: String,
+    pub parsed: Value,
+    pub stack_height: Option<u32>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct MyParsedInstruction { pub program: String, pub program_id: String, pub parsed: Value, pub stack_height: Option<u32>, }
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MyUiPartiallyDecodedInstruction { pub program_id: String, pub accounts: Vec<String>, pub data: String, pub stack_height: Option<u32>, }
+pub struct MyUiPartiallyDecodedInstruction {
+    pub program_id: String,
+    pub accounts: Vec<String>,
+    pub data: String,
+    pub stack_height: Option<u32>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct MyUiAddressTableLookup {
@@ -401,8 +408,6 @@ struct MyUiAddressTableLookup {
     readonly_indexes: Vec<u8>,
 }
 
-
-
 impl From<MyTransactionError> for TransactionError {
     fn from(my_err: MyTransactionError) -> Self {
         match my_err {
@@ -410,38 +415,72 @@ impl From<MyTransactionError> for TransactionError {
             MyTransactionError::AccountLoadedTwice => TransactionError::AccountLoadedTwice,
             MyTransactionError::AccountNotFound => TransactionError::AccountNotFound,
             MyTransactionError::ProgramAccountNotFound => TransactionError::ProgramAccountNotFound,
-            MyTransactionError::InsufficientFundsForFee => TransactionError::InsufficientFundsForFee,
+            MyTransactionError::InsufficientFundsForFee => {
+                TransactionError::InsufficientFundsForFee
+            }
             MyTransactionError::InvalidAccountForFee => TransactionError::InvalidAccountForFee,
             MyTransactionError::AlreadyProcessed => TransactionError::AlreadyProcessed,
             MyTransactionError::BlockhashNotFound => TransactionError::BlockhashNotFound,
-            MyTransactionError::InstructionError(ix, err) => TransactionError::InstructionError(ix, err),
+            MyTransactionError::InstructionError(ix, err) => {
+                TransactionError::InstructionError(ix, err)
+            }
             MyTransactionError::CallChainTooDeep => TransactionError::CallChainTooDeep,
             MyTransactionError::MissingSignatureForFee => TransactionError::MissingSignatureForFee,
             MyTransactionError::InvalidAccountIndex => TransactionError::InvalidAccountIndex,
             MyTransactionError::SignatureFailure => TransactionError::SignatureFailure,
-            MyTransactionError::InvalidProgramForExecution => TransactionError::InvalidProgramForExecution,
+            MyTransactionError::InvalidProgramForExecution => {
+                TransactionError::InvalidProgramForExecution
+            }
             MyTransactionError::SanitizeFailure => TransactionError::SanitizeFailure,
             MyTransactionError::ClusterMaintenance => TransactionError::ClusterMaintenance,
-            MyTransactionError::AccountBorrowOutstanding => TransactionError::AccountBorrowOutstanding,
-            MyTransactionError::WouldExceedMaxBlockCostLimit => TransactionError::WouldExceedMaxBlockCostLimit,
+            MyTransactionError::AccountBorrowOutstanding => {
+                TransactionError::AccountBorrowOutstanding
+            }
+            MyTransactionError::WouldExceedMaxBlockCostLimit => {
+                TransactionError::WouldExceedMaxBlockCostLimit
+            }
             MyTransactionError::UnsupportedVersion => TransactionError::UnsupportedVersion,
             MyTransactionError::InvalidWritableAccount => TransactionError::InvalidWritableAccount,
-            MyTransactionError::WouldExceedMaxAccountCostLimit => TransactionError::WouldExceedMaxAccountCostLimit,
-            MyTransactionError::WouldExceedAccountDataBlockLimit => TransactionError::WouldExceedAccountDataBlockLimit,
+            MyTransactionError::WouldExceedMaxAccountCostLimit => {
+                TransactionError::WouldExceedMaxAccountCostLimit
+            }
+            MyTransactionError::WouldExceedAccountDataBlockLimit => {
+                TransactionError::WouldExceedAccountDataBlockLimit
+            }
             MyTransactionError::TooManyAccountLocks => TransactionError::TooManyAccountLocks,
-            MyTransactionError::AddressLookupTableNotFound => TransactionError::AddressLookupTableNotFound,
-            MyTransactionError::InvalidAddressLookupTableOwner => TransactionError::InvalidAddressLookupTableOwner,
-            MyTransactionError::InvalidAddressLookupTableData => TransactionError::InvalidAddressLookupTableData,
-            MyTransactionError::InvalidAddressLookupTableIndex => TransactionError::InvalidAddressLookupTableIndex,
-            MyTransactionError::InvalidRentPayingAccount => TransactionError::InvalidRentPayingAccount,
-            MyTransactionError::WouldExceedMaxVoteCostLimit => TransactionError::WouldExceedMaxVoteCostLimit,
-            MyTransactionError::WouldExceedAccountDataTotalLimit => TransactionError::WouldExceedAccountDataTotalLimit,
-            MyTransactionError::DuplicateInstruction(ix) => TransactionError::DuplicateInstruction(ix),
+            MyTransactionError::AddressLookupTableNotFound => {
+                TransactionError::AddressLookupTableNotFound
+            }
+            MyTransactionError::InvalidAddressLookupTableOwner => {
+                TransactionError::InvalidAddressLookupTableOwner
+            }
+            MyTransactionError::InvalidAddressLookupTableData => {
+                TransactionError::InvalidAddressLookupTableData
+            }
+            MyTransactionError::InvalidAddressLookupTableIndex => {
+                TransactionError::InvalidAddressLookupTableIndex
+            }
+            MyTransactionError::InvalidRentPayingAccount => {
+                TransactionError::InvalidRentPayingAccount
+            }
+            MyTransactionError::WouldExceedMaxVoteCostLimit => {
+                TransactionError::WouldExceedMaxVoteCostLimit
+            }
+            MyTransactionError::WouldExceedAccountDataTotalLimit => {
+                TransactionError::WouldExceedAccountDataTotalLimit
+            }
+            MyTransactionError::DuplicateInstruction(ix) => {
+                TransactionError::DuplicateInstruction(ix)
+            }
             MyTransactionError::InsufficientFundsForRent { account_index } => {
                 TransactionError::InsufficientFundsForRent { account_index }
             }
-            MyTransactionError::MaxLoadedAccountsDataSizeExceeded => TransactionError::MaxLoadedAccountsDataSizeExceeded,
-            MyTransactionError::InvalidLoadedAccountsDataSizeLimit => TransactionError::InvalidLoadedAccountsDataSizeLimit,
+            MyTransactionError::MaxLoadedAccountsDataSizeExceeded => {
+                TransactionError::MaxLoadedAccountsDataSizeExceeded
+            }
+            MyTransactionError::InvalidLoadedAccountsDataSizeLimit => {
+                TransactionError::InvalidLoadedAccountsDataSizeLimit
+            }
             MyTransactionError::ResanitizationNeeded => TransactionError::ResanitizationNeeded,
             MyTransactionError::ProgramExecutionTemporarilyRestricted { account_index } => {
                 TransactionError::ProgramExecutionTemporarilyRestricted { account_index }
@@ -451,35 +490,32 @@ impl From<MyTransactionError> for TransactionError {
     }
 }
 
-
-fn convert_my_transaction_result<T>(result: MyTransactionResult<T>) -> Result<T, solana_sdk::transaction::TransactionError> {
-    result.map_err(TransactionError::from)  // Convert the error type
+fn convert_my_transaction_result<T>(
+    result: MyTransactionResult<T>,
+) -> Result<T, solana_sdk::transaction::TransactionError> {
+    result.map_err(TransactionError::from) // Convert the error type
 }
 
-
 fn convert_loaded_addresses(
-    loaded_addresses: Option<MyUiLoadedAddresses>
+    loaded_addresses: Option<MyUiLoadedAddresses>,
 ) -> OptionSerializer<UiLoadedAddresses> {
     match loaded_addresses {
-        Some(addresses) => {
-            OptionSerializer::Some(UiLoadedAddresses {
-                writable: addresses.writable,
-                readonly: addresses.readonly,
-            })
-        }
-        None => {
-            OptionSerializer::None
-        }
+        Some(addresses) => OptionSerializer::Some(UiLoadedAddresses {
+            writable: addresses.writable,
+            readonly: addresses.readonly,
+        }),
+        None => OptionSerializer::None,
     }
 }
 
 fn convert_token_balances(
-    balances: Option<Vec<MyUiTransactionTokenBalance>>
+    balances: Option<Vec<MyUiTransactionTokenBalance>>,
 ) -> OptionSerializer<Vec<UiTransactionTokenBalance>> {
     match balances {
-        Some(vec_balances) => {
-            OptionSerializer::Some(vec_balances.into_iter().map(|balance| {
-                UiTransactionTokenBalance {
+        Some(vec_balances) => OptionSerializer::Some(
+            vec_balances
+                .into_iter()
+                .map(|balance| UiTransactionTokenBalance {
                     account_index: balance.account_index,
                     mint: balance.mint,
                     ui_token_amount: UiTokenAmount {
@@ -490,90 +526,122 @@ fn convert_token_balances(
                     },
                     owner: balance.owner,
                     program_id: balance.program_id,
-                }
-            }).collect())
-        }
-        None => {
-            OptionSerializer::None
-        }
+                })
+                .collect(),
+        ),
+        None => OptionSerializer::None,
     }
 }
-
 
 fn convert_my_ui_transaction(my_tx: MyUiTransaction) -> UiTransaction {
     UiTransaction {
         signatures: my_tx.signatures,
         message: UiMessage::Parsed(UiParsedMessage {
-            account_keys: my_tx.message.account_keys.into_iter().map(|key| ParsedAccount {
-                pubkey: key.pubkey,
-                writable: key.writable,
-                signer: key.signer,
-                source: None,  // If `source` is needed, adapt the structure here
-            }).collect(),
+            account_keys: my_tx
+                .message
+                .account_keys
+                .into_iter()
+                .map(|key| ParsedAccount {
+                    pubkey: key.pubkey,
+                    writable: key.writable,
+                    signer: key.signer,
+                    source: None, // If `source` is needed, adapt the structure here
+                })
+                .collect(),
             recent_blockhash: my_tx.message.recent_blockhash,
-            instructions: my_tx.message.instructions.into_iter().map(|instr| {
-                // Convert instr to MyUiParsedInstruction::PartiallyDecoded first
-                let result = if let MyUiInstruction::Parsed(MyUiParsedInstruction::Parsed(decoded_instr)) = instr {
-                    UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
-                        program_id: decoded_instr.program_id,
-                        program: decoded_instr.program,
-                        parsed: decoded_instr.parsed,
-                        stack_height: decoded_instr.stack_height,
-                    }))
-                } else if let MyUiInstruction::Parsed(MyUiParsedInstruction::PartiallyDecoded(decoded_instr)) = instr {
-                    UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
-                        program_id: decoded_instr.program_id,
-                        accounts: decoded_instr.accounts,
-                        data: decoded_instr.data,
-                        stack_height: decoded_instr.stack_height,
-                    }))
-                } else if let MyUiInstruction::Compiled(decoded_instr) = instr {
-                    UiInstruction::Compiled(UiCompiledInstruction{
-                        program_id_index: decoded_instr.program_id_index,
-                        accounts: decoded_instr.accounts,
-                        data: decoded_instr.data,
-                        stack_height: decoded_instr.stack_height,
-                    })
-                } else {
-                    panic!("Expected a Parsed instruction");
-                };
-                result
-            }).collect(),
+            instructions: my_tx
+                .message
+                .instructions
+                .into_iter()
+                .map(|instr| {
+                    // Convert instr to MyUiParsedInstruction::PartiallyDecoded first
+                    let result = if let MyUiInstruction::Parsed(MyUiParsedInstruction::Parsed(
+                        decoded_instr,
+                    )) = instr
+                    {
+                        UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
+                            program_id: decoded_instr.program_id,
+                            program: decoded_instr.program,
+                            parsed: decoded_instr.parsed,
+                            stack_height: decoded_instr.stack_height,
+                        }))
+                    } else if let MyUiInstruction::Parsed(
+                        MyUiParsedInstruction::PartiallyDecoded(decoded_instr),
+                    ) = instr
+                    {
+                        UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(
+                            UiPartiallyDecodedInstruction {
+                                program_id: decoded_instr.program_id,
+                                accounts: decoded_instr.accounts,
+                                data: decoded_instr.data,
+                                stack_height: decoded_instr.stack_height,
+                            },
+                        ))
+                    } else if let MyUiInstruction::Compiled(decoded_instr) = instr {
+                        UiInstruction::Compiled(UiCompiledInstruction {
+                            program_id_index: decoded_instr.program_id_index,
+                            accounts: decoded_instr.accounts,
+                            data: decoded_instr.data,
+                            stack_height: decoded_instr.stack_height,
+                        })
+                    } else {
+                        panic!("Expected a Parsed instruction");
+                    };
+                    result
+                })
+                .collect(),
             address_table_lookups: my_tx.message.address_table_lookups.map(|lookups| {
-                lookups.into_iter().map(|lookup| UiAddressTableLookup {
-                    account_key: lookup.account_key,
-                    writable_indexes: lookup.writable_indexes,
-                    readonly_indexes: lookup.readonly_indexes,
-                }).collect()
+                lookups
+                    .into_iter()
+                    .map(|lookup| UiAddressTableLookup {
+                        account_key: lookup.account_key,
+                        writable_indexes: lookup.writable_indexes,
+                        readonly_indexes: lookup.readonly_indexes,
+                    })
+                    .collect()
             }),
         }),
     }
 }
 
 fn convert_my_ui_transaction_with_status_meta(
-    my_tx_with_meta: MyUiTransactionStatusMeta
+    my_tx_with_meta: MyUiTransactionStatusMeta,
 ) -> UiTransactionStatusMeta {
-    let my_inner_instructions = if let(Some(my_inner_instructions)) = my_tx_with_meta.inner_instructions {
-            my_inner_instructions.into_iter().map(|inner_instr| { 
-                UiInnerInstructions {
-                    index: inner_instr.index,
-                    instructions: inner_instr.instructions.into_iter().map(|instr| {
-                        let result = if let MyUiInstruction::Parsed(MyUiParsedInstruction::Parsed(decoded_instr)) = instr {
+    let my_inner_instructions = if let (Some(my_inner_instructions)) =
+        my_tx_with_meta.inner_instructions
+    {
+        my_inner_instructions
+            .into_iter()
+            .map(|inner_instr| UiInnerInstructions {
+                index: inner_instr.index,
+                instructions: inner_instr
+                    .instructions
+                    .into_iter()
+                    .map(|instr| {
+                        let result = if let MyUiInstruction::Parsed(
+                            MyUiParsedInstruction::Parsed(decoded_instr),
+                        ) = instr
+                        {
                             UiInstruction::Parsed(UiParsedInstruction::Parsed(ParsedInstruction {
                                 program_id: decoded_instr.program_id,
                                 program: decoded_instr.program,
                                 parsed: decoded_instr.parsed,
                                 stack_height: decoded_instr.stack_height,
                             }))
-                        } else if let MyUiInstruction::Parsed(MyUiParsedInstruction::PartiallyDecoded(decoded_instr)) = instr {
-                            UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(UiPartiallyDecodedInstruction {
-                                program_id: decoded_instr.program_id,
-                                accounts: decoded_instr.accounts,
-                                data: decoded_instr.data,
-                                stack_height: decoded_instr.stack_height,
-                            }))
+                        } else if let MyUiInstruction::Parsed(
+                            MyUiParsedInstruction::PartiallyDecoded(decoded_instr),
+                        ) = instr
+                        {
+                            UiInstruction::Parsed(UiParsedInstruction::PartiallyDecoded(
+                                UiPartiallyDecodedInstruction {
+                                    program_id: decoded_instr.program_id,
+                                    accounts: decoded_instr.accounts,
+                                    data: decoded_instr.data,
+                                    stack_height: decoded_instr.stack_height,
+                                },
+                            ))
                         } else if let MyUiInstruction::Compiled(decoded_instr) = instr {
-                            UiInstruction::Compiled(UiCompiledInstruction{
+                            UiInstruction::Compiled(UiCompiledInstruction {
                                 program_id_index: decoded_instr.program_id_index,
                                 accounts: decoded_instr.accounts,
                                 data: decoded_instr.data,
@@ -583,47 +651,46 @@ fn convert_my_ui_transaction_with_status_meta(
                             panic!("Expected a Parsed instruction");
                         };
                         result
-                    }).collect::<Vec<UiInstruction>>()
-                }
-    }).collect::<Vec<UiInnerInstructions>>()} 
-    else {
+                    })
+                    .collect::<Vec<UiInstruction>>(),
+            })
+            .collect::<Vec<UiInnerInstructions>>()
+    } else {
         vec![]
     };
     UiTransactionStatusMeta {
-            err: None, 
-            status: Ok(()),
-            fee: my_tx_with_meta.fee,
-            pre_balances: my_tx_with_meta.pre_balances,
-            post_balances: my_tx_with_meta.post_balances,
-            inner_instructions: OptionSerializer::Some(my_inner_instructions),
-            log_messages: OptionSerializer::none(),
-            pre_token_balances: convert_token_balances(my_tx_with_meta.pre_token_balances),
-            post_token_balances: convert_token_balances(my_tx_with_meta.post_token_balances),
-            rewards: OptionSerializer::none(),
-            loaded_addresses: convert_loaded_addresses(my_tx_with_meta.loaded_addresses),
-            return_data: OptionSerializer::none(),
-            compute_units_consumed: OptionSerializer::none(),
-        }
+        err: None,
+        status: Ok(()),
+        fee: my_tx_with_meta.fee,
+        pre_balances: my_tx_with_meta.pre_balances,
+        post_balances: my_tx_with_meta.post_balances,
+        inner_instructions: OptionSerializer::Some(my_inner_instructions),
+        log_messages: OptionSerializer::none(),
+        pre_token_balances: convert_token_balances(my_tx_with_meta.pre_token_balances),
+        post_token_balances: convert_token_balances(my_tx_with_meta.post_token_balances),
+        rewards: OptionSerializer::none(),
+        loaded_addresses: convert_loaded_addresses(my_tx_with_meta.loaded_addresses),
+        return_data: OptionSerializer::none(),
+        compute_units_consumed: OptionSerializer::none(),
     }
-
+}
 
 fn convert_to_encoded_transaction(ui_tx: UiTransaction) -> EncodedTransaction {
     EncodedTransaction::Json(ui_tx)
 }
 
+// // Helper function to get and increment the index
+// fn get_and_increment_index() -> u64 {
+//     let mut index = GLOBAL_AMM_INDEX;
+//     let current_index = *index;
+//     *index += 1;
+//     current_index
+// }
 
-// Helper function to get and increment the index
-fn get_and_increment_index() -> u64 {
-    let mut index = GLOBAL_AMM_INDEX.lock().unwrap();
-    let current_index = *index;
-    *index += 1;
-    current_index
-}
-
-fn get_index() -> u64 {
-    let index = GLOBAL_AMM_INDEX.lock().unwrap();
-    *index
-}
+// fn get_index() -> u64 {
+//     let index = GLOBAL_AMM_INDEX.lock().unwrap();
+//     *index
+// }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClientConfig {
@@ -760,9 +827,8 @@ impl ChainInstructions {
                 fund_fee_rate,
                 create_pool_fee,
             } => {
-                let index = get_and_increment_index(); // Use the global index here
                 RaydiumCpCommands::InitializeAmmConfig {
-                    index,
+                    index:0,
                     token_0_creator_rate: 6666,
                     token_1_lp_rate: 6666,
                     token_0_lp_rate: 6666,
@@ -775,7 +841,8 @@ impl ChainInstructions {
                 init_amount_0,
                 init_amount_1,
                 open_time,
-            } => { // Use the global index here
+            } => {
+                // Use the global index here
                 RaydiumCpCommands::InitializePool {
                     mint0: Pubkey::new_from_array(
                         bs58::decode(token_0_mint)
@@ -797,7 +864,7 @@ impl ChainInstructions {
                     symbol: String::new(),
                     uri: String::new(),
                     name: String::new(),
-                    amm_config_index: get_index(),
+                    amm_config_index: 0,
                 }
             }
             ChainInstructions::Deposit {
@@ -1410,7 +1477,8 @@ pub struct MintOperationResult {
     pub payer_ata1: Pubkey,
 }
 
-pub fn process_mints(
+pub async fn process_mints(
+    context: &mut ProgramTestContext,
     config: &ClientConfig,
     mint0: &Pubkey,
     mint1: &Pubkey,
@@ -1521,8 +1589,15 @@ pub fn process_mints(
         recent_blockhash,
     );
 
-    let signature = rpc_client.send_and_confirm_transaction_with_spinner(&transaction)?;
-    println!("Transaction signature: {}", signature);
+    let res = context.banks_client.process_transaction(transaction).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
 
     // Here you would typically send these instructions in a transaction
     // For brevity, we're skipping the actual sending of transactions
@@ -1546,8 +1621,31 @@ fn generate_random_string() -> String {
         .collect()
 }
 
+pub fn program_test() -> ProgramTest {
+    let mut program_test = ProgramTest::default();
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+    program_test.prefer_bpf(true);
+    program_test.add_program(
+        "stacc",
+        solana_program::pubkey::Pubkey::from_str("6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy").unwrap(),
+        None,
+    );
+    program_test.add_program("spl_token_2022", spl_token_2022::ID, None);
+    program_test.add_program("spl_token", spl_token::ID, None);
+    program_test.add_program(
+        "spl_associated_token_account",
+        spl_associated_token_account::ID,
+        None,
+    );
+    program_test.add_program("mpl-metadata", mpl_token_metadata::ID, None);
+
+    program_test
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut GLOBAL_INDEX: u64 = 0;
+    let mut context = program_test().start_with_context().await;
     let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
     let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
     let payer = read_keypair_file(&pool_config.payer_path)?;
@@ -1560,7 +1658,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let entry = entry?;
         let path = entry.path();
 
-        let mut all_instructions : Vec<ChainInstructions> = Vec::new();
+        let mut all_instructions: Vec<ChainInstructions> = Vec::new();
         println!("Processing file: {:?}", entry);
         println!("Starting to process transactions");
         if path.extension().and_then(|s| s.to_str()) == Some("txt") {
@@ -1568,12 +1666,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let reader = BufReader::new(file);
             for line in reader.lines() {
                 let line = line?;
-               
+
                 // Process each line here
-                let element: MyEncodedConfirmedTransactionWithStatusMeta = serde_json::from_str(&line)?;
+                let element: MyEncodedConfirmedTransactionWithStatusMeta =
+                    serde_json::from_str(&line)?;
                 let ui_tx = convert_my_ui_transaction(element.transaction.transaction);
-                let meta = convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
-                 // Convert UiTransaction to EncodedTransaction
+                let meta =
+                    convert_my_ui_transaction_with_status_meta(element.transaction.meta.unwrap());
+                // Convert UiTransaction to EncodedTransaction
                 let encoded_tx = convert_to_encoded_transaction(ui_tx);
                 let mut instructions = parse_program_instruction(
                     program_id.to_string().as_str(),
@@ -1582,36 +1682,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 )?;
 
                 all_instructions.append(&mut instructions);
-                
             }
         }
 
-        if let Some(pos) = all_instructions.iter().position(|x| matches!(x, ChainInstructions::Initialize {..})) {
+        if let Some(pos) = all_instructions
+            .iter()
+            .position(|x| matches!(x, ChainInstructions::Initialize { .. }))
+        {
             all_instructions.truncate(pos + 1);
         }
 
-        let amm_config_index = get_and_increment_index();
+        let amm_config_index = GLOBAL_INDEX + 1;
+        GLOBAL_INDEX += 1;
         all_instructions.push(ChainInstructions::CreateAmmConfig {
             index: amm_config_index as u16,
             trade_fee_rate: 6666,
             protocol_fee_rate: 6666,
             fund_fee_rate: 6666,
             create_pool_fee: 6666,
-        } );
+        });
         all_instructions.reverse();
 
         println!("All instructions: {:?}", all_instructions);
 
-
         for instruction in all_instructions {
             let raydium_cp_command = instruction.to_raydium_cp_commands();
             execute_raydium_command(
+                &mut context, 
                 &rpc_client,
                 &pool_config,
                 &payer,
                 &raydium_cp_command,
+                amm_config_index, 
                 &mut mint_account_owner_cache,
-            )?;
+            ).await;
         }
     }
 
@@ -1620,11 +1724,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn execute_raydium_command(
+async fn execute_raydium_command(
+    context: &mut ProgramTestContext,
     rpc_client: &RpcClient,
     pool_config: &ClientConfig,
     payer: &Keypair,
     command: &RaydiumCpCommands,
+    config_index: u64,
     mint_account_owner_cache: &mut HashMap<Pubkey, (Pubkey, u8)>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     match command {
@@ -1651,8 +1757,15 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
         }
         RaydiumCpCommands::InitializePool {
             mint0,
@@ -1670,7 +1783,7 @@ fn execute_raydium_command(
             } else {
                 (mint0, mint1, *init_amount_0, *init_amount_1, *open_time)
             };
-            let result = process_mints(pool_config, &mint0, &mint1, payer)?;
+            let result = process_mints(context, pool_config, &mint0, &mint1, payer).await.unwrap();
             let mint_0_info = result.mint0_info;
             let mint_1_info = result.mint1_info;
             let mint_0 = result.new_mint0;
@@ -1699,7 +1812,7 @@ fn execute_raydium_command(
                 uri.clone(),
                 name.clone(),
                 lp_mint.pubkey(),
-                *amm_config_index,
+                config_index,
             )?;
             let signers = vec![payer];
             let recent_hash = rpc_client.get_latest_blockhash()?;
@@ -1709,8 +1822,15 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
         }
         RaydiumCpCommands::Deposit {
             pool_id,
@@ -1879,8 +1999,15 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(&rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
         }
         RaydiumCpCommands::Withdraw {
             pool_id,
@@ -2017,8 +2144,15 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
         }
 
         RaydiumCpCommands::SwapBaseIn {
@@ -2231,8 +2365,15 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(&rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
         }
         RaydiumCpCommands::SwapBaseOut {
             pool_id,
@@ -2445,13 +2586,19 @@ fn execute_raydium_command(
                 &signers,
                 recent_hash,
             );
-            let signature = send_txn(&rpc_client, &txn, true)?;
-            println!("{}", signature);
+            let res = context.banks_client.process_transaction(txn).await;
+            match res {
+                Ok(res) => {
+                    println!("Transaction executed. Result: {:?}", res);
+                }
+                Err(err) => {
+                    println!("Transaction failed. Error: {:?}", err);
+                }
+            }
+            
         }
     }
     Ok(())
 }
-
-
 
 // turn chain instructions into raydium commands
