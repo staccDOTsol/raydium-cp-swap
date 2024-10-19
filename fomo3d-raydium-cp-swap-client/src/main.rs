@@ -7,15 +7,12 @@ use arrayref::array_ref;
 use clap::Parser;
 use configparser::ini::Ini;
 use instructions::events_instruction_parse::{parse_program_instruction, ChainInstructions};
-use raydium_cp_swap::states::PoolState;
 use raydium_cp_swap::states::AmmConfig;
+use raydium_cp_swap::states::PoolState;
 use serde_json::Value;
 use solana_account_decoder::parse_token::UiTokenAmount;
 use solana_client::nonblocking::rpc_client::RpcClient;
-use solana_program_test::{
-    tokio,
-    ProgramTest, ProgramTestContext,
-};
+use solana_program_test::{tokio, ProgramTest, ProgramTestContext};
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::instruction::InstructionError;
@@ -35,26 +32,26 @@ use solana_transaction_status::{
     UiTransactionStatusMeta, UiTransactionTokenBalance,
 };
 use spl_associated_token_account::get_associated_token_address_with_program_id;
-use tests::{keypair_clone, process_transaction};
 use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use std::sync::Arc;
+use tests::{keypair_clone, process_transaction};
 
 mod instructions;
+use instructions::amm_instructions::*;
 use instructions::token_instructions::*;
 use instructions::utils::*;
-use instructions::amm_instructions::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
-    EncodedTransaction, UiAddressTableLookup,
-    UiInstruction, UiMessage, UiParsedMessage, UiPartiallyDecodedInstruction, UiTransaction,
+    EncodedTransaction, UiAddressTableLookup, UiInstruction, UiMessage, UiParsedMessage,
+    UiPartiallyDecodedInstruction, UiTransaction,
 };
 use spl_token_2022::{
     extension::StateWithExtensionsMut,
@@ -823,15 +820,13 @@ impl ChainInstructions {
                 protocol_fee_rate,
                 fund_fee_rate,
                 create_pool_fee,
-            } => {
-                RaydiumCpCommands::InitializeAmmConfig {
-                    index:0,
-                    token_0_creator_rate: 6666,
-                    token_1_lp_rate: 6666,
-                    token_0_lp_rate: 6666,
-                    token_1_creator_rate: 6666,
-                }
-            }
+            } => RaydiumCpCommands::InitializeAmmConfig {
+                index: 0,
+                token_0_creator_rate: 6666,
+                token_1_lp_rate: 6666,
+                token_0_lp_rate: 6666,
+                token_1_creator_rate: 6666,
+            },
             ChainInstructions::Initialize {
                 token_0_mint,
                 token_1_mint,
@@ -970,7 +965,8 @@ async fn find_best_route(
     for pool in pools {
         for token_mint in &[pool.pool.token_0_mint, pool.pool.token_1_mint] {
             if !token_decimals.contains_key(token_mint) {
-                let decimals = get_token_decimals(rpc_client, token_mint, mint_account_owner_cache).await;
+                let decimals =
+                    get_token_decimals(rpc_client, token_mint, mint_account_owner_cache).await;
                 if let Ok(decimals) = decimals {
                     token_decimals.insert(*token_mint, decimals);
                 } else {
@@ -1092,7 +1088,11 @@ async fn find_best_route(
                     &output_token_program,
                 );
 
-            if rpc_client.get_account(&user_output_token_account).await.is_err() {
+            if rpc_client
+                .get_account(&user_output_token_account)
+                .await
+                .is_err()
+            {
                 let create_ata_instr =
                     spl_associated_token_account::instruction::create_associated_token_account(
                         &payer.pubkey(),
@@ -1124,7 +1124,8 @@ async fn find_best_route(
                 current_input_amount,
                 current_input_token,
                 edge.to_token,
-            ).await?;
+            )
+            .await?;
 
             let minimum_amount_out =
                 amount_with_slippage(output_amount, pool_config.slippage, false);
@@ -1267,7 +1268,8 @@ async fn find_best_route(
                     amount_out,
                     token,
                     edge.to_token,
-                ).await? as u64;
+                )
+                .await? as u64;
 
                 let mut new_path = path.clone();
                 new_path.push(edge.clone());
@@ -1363,8 +1365,12 @@ async fn get_token_decimals(
 }
 
 async fn get_pool_reserves(rpc_client: &RpcClient, pool: &PoolState) -> Result<(u64, u64)> {
-    let token_0_vault = rpc_client.get_token_account_balance(&pool.token_0_vault).await?;
-    let token_1_vault = rpc_client.get_token_account_balance(&pool.token_1_vault).await?;
+    let token_0_vault = rpc_client
+        .get_token_account_balance(&pool.token_0_vault)
+        .await?;
+    let token_1_vault = rpc_client
+        .get_token_account_balance(&pool.token_1_vault)
+        .await?;
     let reserve_a = token_0_vault.amount.parse::<u64>()?;
     let reserve_b = token_1_vault.amount.parse::<u64>()?;
     Ok((reserve_a, reserve_b))
@@ -1419,7 +1425,7 @@ fn prepare_swap_instruction(
 ) -> Result<()> {
     let input_token_program = mint_account_owner_cache.get(&input_token_mint).unwrap().0;
     let output_token_program = mint_account_owner_cache.get(&output_token_mint).unwrap().0;
-    
+
     // instruction ran without keypair
     let keypair = Keypair::new();
     println!("Incorrect keypair used. please fix this line");
@@ -1513,7 +1519,7 @@ pub async fn process_mints(
         freeze_authority: None,
         owner: mint1_account.owner,
     };
-
+    
     // Get token program for each mint
     let token_program0 = mint0_account.owner;
     let token_program1 = mint1_account.owner;
@@ -1527,24 +1533,24 @@ pub async fn process_mints(
     let mut instructions: Vec<Instruction> = vec![];
 
     let create_mint0_ix = create_and_init_mint_instr(
-        config,
-        token_program0,
-        &new_mint0,
+        ctx,
+        &token_program0,
+        &new_mint0_keypair,
         &payer.pubkey(),
-        mint0_info.freeze_authority.as_ref(),
         vec![],
         mint0_info.decimals,
-    )?;
+    )
+    .await?;
 
     let create_mint1_ix = create_and_init_mint_instr(
-        config,
-        token_program1,
-        &new_mint1,
+        ctx,
+        &token_program1,
+        &new_mint1_keypair,
         &payer.pubkey(),
-        mint1_info.freeze_authority.as_ref(),
         vec![],
         mint1_info.decimals,
-    )?;
+    )
+    .await?;
 
     let payer_ata0 =
         spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint0);
@@ -1552,27 +1558,25 @@ pub async fn process_mints(
         spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint1);
     // Create ATA accounts for payer
     let payer_ata0_instr =
-        create_ata_token_account_instr(config, token_program0, &new_mint0, &payer.pubkey())?;
+        create_ata_token_account_instr(token_program0, &new_mint0, &payer.pubkey())?;
     let payer_ata1_instr =
-        create_ata_token_account_instr(config, token_program1, &new_mint1, &payer.pubkey())?;
+        create_ata_token_account_instr(token_program1, &new_mint1, &payer.pubkey())?;
 
     // Mint tokens to payer's ATA accounts
     let mint_to_ata0_ix = spl_token_mint_to_instr(
-        config,
         token_program0,
         &new_mint0,
         &payer_ata0,
         mint0_info.supply,
-        &Keypair::new(), // You might want to use a specific keypair for minting authority
+        &payer, // You might want to use a specific keypair for minting authority
     )?;
 
     let mint_to_ata1_ix = spl_token_mint_to_instr(
-        config,
         token_program1,
         &new_mint1,
         &payer_ata1,
         mint1_info.supply,
-        &Keypair::new(), // You might want to use a specific keypair for minting authority
+        &payer, // You might want to use a specific keypair for minting authority
     )?;
 
     instructions.extend(create_mint0_ix);
@@ -1582,7 +1586,12 @@ pub async fn process_mints(
     instructions.extend(mint_to_ata0_ix);
     instructions.extend(mint_to_ata1_ix);
 
-    process_transaction(&ctx.borrow_mut(), &instructions, Some(&[&new_mint0_keypair, &new_mint1_keypair])).await?;
+    process_transaction(
+        &ctx.borrow_mut(),
+        &instructions,
+        Some(&[&new_mint0_keypair, &new_mint1_keypair]),
+    )
+    .await?;
     // Here you would typically send these instructions in a transaction
     // For brevity, we're skipping the actual sending of transactions
 
@@ -1626,10 +1635,10 @@ fn generate_random_string() -> String {
 //     program_test
 // }
 
-
 pub fn program_test() -> ProgramTest {
     let mut program_test = ProgramTest::default();
 
+    program_test.set_compute_max_units(1_000_000);
     program_test.prefer_bpf(true);
     program_test.add_program("raydium_cp_swap", raydium_cp_swap::ID, None);
     program_test.add_program("mpl_token_metadata", mpl_token_metadata::ID, None);
@@ -1643,10 +1652,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut context = program_test().start_with_context().await;
     // let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
     // let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
-    
+
     let dir_path = Path::new("cp-swap-txs");
     let pool_config = load_cfg(&"client_config.ini".to_string())?;
-    
+
     let payer = keypair_clone(&context.payer);
     // let payer = read_keypair_file(&pool_config.payer_path)?;
     // let ctx = Arc::new(Mutex::new(context));
@@ -1712,14 +1721,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         for instruction in all_instructions {
             let raydium_cp_command = instruction.to_raydium_cp_commands();
             let _ = execute_raydium_command(
-                &ctx.clone(), 
+                &ctx.clone(),
                 &rpc_client,
                 &pool_config,
                 &payer,
                 &raydium_cp_command,
-                amm_config_index, 
+                amm_config_index,
                 &mut mint_account_owner_cache,
-            ).await;
+            )
+            .await;
         }
     }
 
@@ -1772,7 +1782,8 @@ async fn execute_raydium_command(
             } else {
                 (mint0, mint1, *init_amount_0, *init_amount_1, *open_time)
             };
-            let result = process_mints(ctx.borrow_mut(), pool_config, &mint0, &mint1, payer).await.unwrap();
+            let result = process_mints(ctx.borrow_mut(), pool_config, &mint0, &mint1, payer)
+                .await?;
             let mint_0_info = result.mint0_info;
             let mint_1_info = result.mint1_info;
             let token_0_program = mint_0_info.owner;
@@ -1908,7 +1919,8 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 amount_0_with_slippage,
                 amount_1_with_slippage,
-            ).await;
+            )
+            .await;
             println!(
                 "transfer_fee_0:{}, transfer_fee_1:{}",
                 transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
@@ -1962,8 +1974,6 @@ async fn execute_raydium_command(
             instructions.extend(deposit_instr);
 
             process_transaction(ctx.borrow_mut(), &instructions, None).await?;
-
-            
         }
         RaydiumCpCommands::Withdraw {
             pool_id,
@@ -2056,7 +2066,8 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 amount_0_with_slippage,
                 amount_1_with_slippage,
-            ).await;
+            )
+            .await;
             println!(
                 "transfer_fee_0:{}, transfer_fee_1:{}",
                 transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
@@ -2092,7 +2103,6 @@ async fn execute_raydium_command(
                 amount_1_min,
             )?;
             instructions.extend(withdraw_instr);
-            
 
             process_transaction(ctx.borrow_mut(), &instructions, None).await?;
         }
@@ -2256,7 +2266,7 @@ async fn execute_raydium_command(
                 u128::from(total_output_token_amount),
                 total_fee,
                 protocol_fee,
-                output_token_creator_rate
+                output_token_creator_rate,
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -2276,7 +2286,6 @@ async fn execute_raydium_command(
 
             let mut instructions = Vec::new();
             let create_user_output_token_instr = create_ata_token_account_instr(
-                &pool_config,
                 spl_token::id(),
                 &output_token_mint,
                 &payer.pubkey(),
@@ -2459,7 +2468,7 @@ async fn execute_raydium_command(
                 u128::from(total_output_token_amount),
                 total_fee,
                 protocol_fee,
-                input_token_creator_rate
+                input_token_creator_rate,
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -2482,7 +2491,6 @@ async fn execute_raydium_command(
                 amount_with_slippage(input_transfer_amount, pool_config.slippage, true);
             let mut instructions = Vec::new();
             let create_user_output_token_instr = create_ata_token_account_instr(
-                &pool_config,
                 spl_token::id(),
                 &output_token_mint,
                 &payer.pubkey(),

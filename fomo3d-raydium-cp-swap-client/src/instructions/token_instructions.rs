@@ -1,7 +1,9 @@
 use super::super::{read_keypair_file, ClientConfig};
 use anchor_client::{Client, Cluster};
+use anchor_lang::Key;
 use anyhow::Result;
 use solana_client::rpc_client::RpcClient;
+use solana_program_test::ProgramTestContext;
 use solana_sdk::{
     account::WritableAccount,
     instruction::Instruction,
@@ -15,32 +17,80 @@ use spl_token_2022::{
     state::{Account, Mint},
 };
 use spl_token_client::token::ExtensionInitializationParams;
-use std::{rc::Rc, str::FromStr};
+use std::{cell::RefCell, rc::Rc, str::FromStr, sync::Arc};
 
-pub fn create_and_init_mint_instr(
-    config: &ClientConfig,
-    token_program: Pubkey,
-    mint_key: &Pubkey,
+pub async fn create_and_init_mint_instr(
+    ctx: &Arc<RefCell<ProgramTestContext>>,
+    token_program: &Pubkey,
+    mint_key: &Keypair,
     mint_authority: &Pubkey,
-    freeze_authority: Option<&Pubkey>,
     extension_init_params: Vec<ExtensionInitializationParams>,
     decimals: u8,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path);
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    // Client.
-    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
-    let program = if token_program == spl_token::id() {
-        client.program(spl_token::id())?
-    } else {
-        client.program(spl_token_2022::id())?
-    };
+    let banks_client = &mut ctx.borrow_mut().banks_client;
+
     let extension_types = extension_init_params
         .iter()
         .map(|e| e.extension())
         .collect::<Vec<_>>();
 
-    Ok(vec![])
+    let rent = banks_client.get_rent().await.unwrap();
+    let space = ExtensionType::try_calculate_account_len::<Mint>(&extension_types).unwrap();
+    let mint_rent = rent.minimum_balance(space);
+    let mint_pubkey = mint_key.pubkey();
+
+    let mut instructions = vec![system_instruction::create_account(
+        &mint_authority,
+        &mint_pubkey,
+        mint_rent,
+        space as u64,
+        token_program,
+    )];
+    for extension_type in extension_types {
+        let instruction = match extension_type {
+                ExtensionType::MintCloseAuthority =>
+                    spl_token_2022::instruction::initialize_mint_close_authority(
+                        token_program,
+                        &mint_pubkey,
+                        Some(mint_authority),
+                    ),
+                ExtensionType::DefaultAccountState =>
+                    spl_token_2022::extension::default_account_state::instruction::initialize_default_account_state(
+                        token_program,
+                        &mint_pubkey,
+                        &spl_token_2022::state::AccountState::Initialized,
+                    ),
+                ExtensionType::TransferFeeConfig => spl_token_2022::extension::transfer_fee::instruction::initialize_transfer_fee_config(
+                    token_program,
+                    &mint_pubkey,
+                    Some(mint_authority),
+                    Some(mint_authority),
+                    100,
+                    1_000_000,
+                ),
+                ExtensionType::InterestBearingConfig => spl_token_2022::extension::interest_bearing_mint::instruction::initialize(
+                    token_program,
+                    &mint_pubkey,
+                    Some(*mint_authority),
+                    600,
+                ),
+                ExtensionType::NonTransferable =>
+                    spl_token_2022::instruction::initialize_non_transferable_mint(token_program, &mint_pubkey),
+                _ => unimplemented!(),
+            };
+        instructions.push(instruction.unwrap());
+    }
+    instructions.push(
+        spl_token_2022::instruction::initialize_mint(
+            token_program,
+            &mint_key.pubkey(),
+            mint_authority,
+            None,
+            decimals,
+        )
+        .unwrap(),
+    );
+    Ok(instructions)
 }
 
 pub fn create_account_rent_exmpt_instr(
@@ -70,28 +120,17 @@ pub fn create_account_rent_exmpt_instr(
 }
 
 pub fn create_ata_token_account_instr(
-    config: &ClientConfig,
     token_program: Pubkey,
     mint: &Pubkey,
     owner: &Pubkey,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path);
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    // Client.
-    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
-    let program = client.program(token_program)?;
-    let instructions = program
-        .request()
-        .instruction(
-            spl_associated_token_account::instruction::create_associated_token_account(
-                &program.payer(),
-                owner,
-                mint,
-                &token_program,
-            ),
-        )
-        .instructions()?;
-    Ok(instructions)
+    
+    Ok(vec![spl_associated_token_account::instruction::create_associated_token_account(
+        &owner,
+        owner,
+        mint,
+        &token_program,
+    )])
 }
 
 pub fn create_and_init_auxiliary_token(
@@ -205,35 +244,20 @@ pub fn spl_token_transfer_instr(
 }
 
 pub fn spl_token_mint_to_instr(
-    config: &ClientConfig,
     token_program: Pubkey,
     mint: &Pubkey,
     to: &Pubkey,
     amount: u64,
     mint_authority: &Keypair,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path);
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    // Client.
-    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
-    let program = if token_program == spl_token::id() {
-        client.program(spl_token::id())?
-    } else {
-        client.program(spl_token_2022::id())?
-    };
-    let instructions = program
-        .request()
-        .instruction(spl_token_2022::instruction::mint_to(
-            &program.id(),
-            mint,
-            to,
-            &mint_authority.pubkey(),
-            &[],
-            amount,
-        )?)
-        .signer(mint_authority)
-        .instructions()?;
-    Ok(instructions)
+    Ok(vec![spl_token_2022::instruction::mint_to(
+        &token_program,
+        mint,
+        to,
+        &mint_authority.pubkey(),
+        &[&mint_authority.pubkey()],
+        amount,
+    )?])
 }
 
 // pub fn wrap_sol_instr(config: &ClientConfig, amount: u64) -> Result<Vec<Instruction>> {

@@ -249,5 +249,5 @@ def process_files_in_folder(folder_path):
 
 
 if __name__ == "__main__":
-    folder_path = "/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs"
+    folder_path = "cp-swap-txs"
     process_files_in_folder(folder_path)

@@ -1809,7 +1809,7 @@ dependencies = [
  "lazy_static",
  "mpl-token-metadata",
  "rand 0.8.5",
- "raydium-cp-swap 0.1.1392",
+ "raydium-cp-swap",
  "regex",
  "serde",
  "serde_json",
@@ -3472,26 +3472,6 @@ dependencies = [
  "proptest",
  "quickcheck",
  "rand 0.8.5",
- "solana-security-txt",
- "spl-math",
- "spl-memo 4.0.0",
- "spl-token 4.0.0",
- "spl-token-2022 3.0.4",
- "uint",
-]
-
-[[package]]
-name = "raydium-cp-swap"
-version = "0.1.1392"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf40f2704e0935f14e5b85d65c804d5e4099ad012e664ad03e902224c7726a2"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "arrayref",
- "bytemuck",
- "mpl-token-metadata",
- "num-traits",
  "solana-security-txt",
  "spl-math",
  "spl-memo 4.0.0",
