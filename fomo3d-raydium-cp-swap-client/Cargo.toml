@@ -10,7 +10,7 @@ default-run = "fomo3d-raydium-cp-swap-client"
 [dependencies]
 anchor-client = "0.30.1"
 anchor-lang = "0.30.1"
-raydium-cp-swap = { version = "0.1.142", features = ["no-entrypoint"] }
+raydium-cp-swap = { path="../programs/cp-swap", features = ["no-entrypoint"] }
 solana-sdk = ">=1.14, < 1.19"
 solana-client = ">=1.18, < 1.19"
 solana-account-decoder = ">=1.14, < 1.19"

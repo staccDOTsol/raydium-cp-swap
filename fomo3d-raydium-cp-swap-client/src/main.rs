@@ -1,36 +1,32 @@
 #![allow(dead_code)]
 
 // Shuffle the pools array
-use anchor_client::{Client, Cluster};
 use anchor_lang::{AccountDeserialize, AnchorDeserialize};
 use anyhow::{format_err, Result};
 use arrayref::array_ref;
 use clap::Parser;
 use configparser::ini::Ini;
 use instructions::events_instruction_parse::{parse_program_instruction, ChainInstructions};
-use mpl_token_metadata::types::Key;
-use rand::seq::SliceRandom;
-use raydium_cp_swap::states::{pool, PoolState};
-use raydium_cp_swap::{curve::constant_product::ConstantProductCurve, states::AmmConfig};
-use serde_json::{from_str, Value};
+use raydium_cp_swap::states::PoolState;
+use raydium_cp_swap::states::AmmConfig;
+use serde_json::Value;
 use solana_account_decoder::parse_token::UiTokenAmount;
-use solana_client::rpc_config::RpcSendTransactionConfig;
-use solana_client::{rpc_client::RpcClient, rpc_config::RpcTransactionConfig};
-use solana_program_runtime::compute_budget;
+use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_program_test::{
-    tokio::{self, sync::Mutex},
-    BanksClient, ProgramTest, ProgramTestContext,
+    tokio,
+    ProgramTest, ProgramTestContext,
 };
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::instruction::InstructionError;
 use solana_sdk::program_pack::Pack;
+use solana_sdk::signer::keypair;
 use solana_sdk::transaction::TransactionError;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     pubkey::Pubkey,
-    signature::{Keypair, Signature, Signer},
+    signature::{Keypair, Signer},
     transaction::Transaction,
 };
 use solana_transaction_status::parse_instruction::ParsedInstruction;
@@ -39,25 +35,25 @@ use solana_transaction_status::{
     UiTransactionStatusMeta, UiTransactionTokenBalance,
 };
 use spl_associated_token_account::get_associated_token_address_with_program_id;
+use tests::{keypair_clone, process_transaction};
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
-use std::ops::Add;
-use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 mod instructions;
-use instructions::rpc::*;
 use instructions::token_instructions::*;
 use instructions::utils::*;
-use instructions::{amm_instructions::*, rpc};
-use lazy_static::lazy_static;
+use instructions::amm_instructions::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use solana_transaction_status::option_serializer::OptionSerializer;
 use solana_transaction_status::parse_accounts::ParsedAccount;
 use solana_transaction_status::{
-    EncodedConfirmedTransactionWithStatusMeta, EncodedTransaction, UiAddressTableLookup,
+    EncodedTransaction, UiAddressTableLookup,
     UiInstruction, UiMessage, UiParsedMessage, UiPartiallyDecodedInstruction, UiTransaction,
 };
 use spl_token_2022::{
@@ -67,6 +63,7 @@ use spl_token_2022::{
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
+mod tests;
 
 pub type StringAmount = String;
 pub type StringDecimals = String;
@@ -949,7 +946,7 @@ fn calculate_weight(rate: f64) -> f64 {
     }
 }
 use solana_sdk::hash::Hasher;
-fn find_best_route(
+async fn find_best_route(
     rpc_client: &RpcClient,
     pools: &[Pool],
     input_token: Pubkey,
@@ -973,7 +970,7 @@ fn find_best_route(
     for pool in pools {
         for token_mint in &[pool.pool.token_0_mint, pool.pool.token_1_mint] {
             if !token_decimals.contains_key(token_mint) {
-                let decimals = get_token_decimals(rpc_client, token_mint, mint_account_owner_cache);
+                let decimals = get_token_decimals(rpc_client, token_mint, mint_account_owner_cache).await;
                 if let Ok(decimals) = decimals {
                     token_decimals.insert(*token_mint, decimals);
                 } else {
@@ -990,7 +987,7 @@ fn find_best_route(
         let token_a = pool.pool.token_0_mint;
         let token_b = pool.pool.token_1_mint;
 
-        let (reserve_a, reserve_b) = match get_pool_reserves(rpc_client, &pool.pool) {
+        let (reserve_a, reserve_b) = match get_pool_reserves(rpc_client, &pool.pool).await {
             Ok(reserves) => reserves,
             Err(_) => continue,
         };
@@ -1095,7 +1092,7 @@ fn find_best_route(
                     &output_token_program,
                 );
 
-            if rpc_client.get_account(&user_output_token_account).is_err() {
+            if rpc_client.get_account(&user_output_token_account).await.is_err() {
                 let create_ata_instr =
                     spl_associated_token_account::instruction::create_associated_token_account(
                         &payer.pubkey(),
@@ -1127,7 +1124,7 @@ fn find_best_route(
                 current_input_amount,
                 current_input_token,
                 edge.to_token,
-            )?;
+            ).await?;
 
             let minimum_amount_out =
                 amount_with_slippage(output_amount, pool_config.slippage, false);
@@ -1181,7 +1178,7 @@ fn find_best_route(
         println!("Total instructions: {}", instructions.len());
 
         let signers = vec![&payer];
-        let recent_blockhash = rpc_client.get_latest_blockhash()?;
+        let recent_blockhash = rpc_client.get_latest_blockhash().await?;
         // Deduplicate instructions
         let mut unique_instructions = Vec::new();
         let mut seen_instructions = HashSet::new();
@@ -1208,14 +1205,14 @@ fn find_best_route(
 
         loop {
             let signers = vec![&payer];
-            let recent_blockhash = rpc_client.get_latest_blockhash()?;
+            let recent_blockhash = rpc_client.get_latest_blockhash().await?;
             txn = VersionedTransaction::from(Transaction::new_signed_with_payer(
                 &instructions,
                 Some(&payer.pubkey()),
                 &signers,
                 recent_blockhash,
             ));
-            let simulated = rpc_client.simulate_transaction(&txn)?;
+            let simulated = rpc_client.simulate_transaction(&txn).await?;
             if let Some(err) = simulated.value.err {
                 match err {
                     solana_sdk::transaction::TransactionError::DuplicateInstruction(index) => {
@@ -1270,7 +1267,7 @@ fn find_best_route(
                     amount_out,
                     token,
                     edge.to_token,
-                )? as u64;
+                ).await? as u64;
 
                 let mut new_path = path.clone();
                 new_path.push(edge.clone());
@@ -1295,7 +1292,7 @@ fn find_best_route(
 }
 use raydium_cp_swap::curve::CurveCalculator;
 
-fn calculate_swap_output(
+async fn calculate_swap_output(
     rpc_client: &RpcClient,
     pool: &PoolState,
     mint_account_owner_cache: &mut HashMap<Pubkey, (Pubkey, u8)>,
@@ -1303,7 +1300,7 @@ fn calculate_swap_output(
     from_token: Pubkey,
     to_token: Pubkey,
 ) -> Result<u64> {
-    let (reserve_0, reserve_1) = get_pool_reserves(rpc_client, pool)?;
+    let (reserve_0, reserve_1) = get_pool_reserves(rpc_client, pool).await?;
     if reserve_0 == 0 || reserve_1 == 0 {
         return Err(format_err!("Pool has zero reserves."));
     }
@@ -1315,12 +1312,12 @@ fn calculate_swap_output(
     };
 
     // Load AMM config to get fee rates
-    let amm_config = rpc_client.get_account(&pool.amm_config)?;
+    let amm_config = rpc_client.get_account(&pool.amm_config).await?;
     let amm_config_data = amm_config.data.as_slice();
     let amm_config_state: AmmConfig = AnchorDeserialize::deserialize(&mut &amm_config_data[8..])
         .map_err(|e| format_err!("Failed to deserialize AmmConfig: {}", e))?;
 
-    let (input_token_creator_rate, input_token_lp_rate) = if from_token == pool.token_0_mint {
+    let (output_token_creator_rate, output_token_lp_rate) = if from_token == pool.token_0_mint {
         (
             amm_config_state.token_0_creator_rate,
             amm_config_state.token_0_lp_rate,
@@ -1331,14 +1328,17 @@ fn calculate_swap_output(
             amm_config_state.token_1_lp_rate,
         )
     };
+    let total_fee = output_token_creator_rate + output_token_lp_rate;
+    let protocol_fee = total_fee / 10000 * 2;
 
     // Use Raydium's CurveCalculator to compute the swap output
     let result = CurveCalculator::swap_base_input(
         u128::from(amount_in),
         u128::from(total_input_amount),
         u128::from(total_output_amount),
-        input_token_creator_rate,
-        input_token_lp_rate,
+        total_fee,
+        protocol_fee,
+        output_token_creator_rate,
     )
     .ok_or(format_err!("Swap calculation failed"))?;
 
@@ -1347,7 +1347,7 @@ fn calculate_swap_output(
 
     Ok(amount_out)
 }
-fn get_token_decimals(
+async fn get_token_decimals(
     rpc_client: &RpcClient,
     token_mint: &Pubkey,
     mint_account_owner_cache: &mut HashMap<Pubkey, (Pubkey, u8)>,
@@ -1356,15 +1356,15 @@ fn get_token_decimals(
         return Ok(*decimals);
     }
 
-    let account = rpc_client.get_account(token_mint)?;
+    let account = rpc_client.get_account(token_mint).await?;
     let mint = Mint::unpack(&account.data)?;
     mint_account_owner_cache.insert(*token_mint, (spl_token::id(), mint.decimals));
     Ok(mint.decimals)
 }
 
-fn get_pool_reserves(rpc_client: &RpcClient, pool: &PoolState) -> Result<(u64, u64)> {
-    let token_0_vault = rpc_client.get_token_account_balance(&pool.token_0_vault)?;
-    let token_1_vault = rpc_client.get_token_account_balance(&pool.token_1_vault)?;
+async fn get_pool_reserves(rpc_client: &RpcClient, pool: &PoolState) -> Result<(u64, u64)> {
+    let token_0_vault = rpc_client.get_token_account_balance(&pool.token_0_vault).await?;
+    let token_1_vault = rpc_client.get_token_account_balance(&pool.token_1_vault).await?;
     let reserve_a = token_0_vault.amount.parse::<u64>()?;
     let reserve_b = token_1_vault.amount.parse::<u64>()?;
     Ok((reserve_a, reserve_b))
@@ -1389,10 +1389,11 @@ pub fn try_deserialize_unchecked_from_bytes_zc(input: &[u8]) -> Result<PoolState
     };
     Ok(pool_state)
 }
-fn fetch_all_pools(rpc_client: &RpcClient, amm_program_id: &Pubkey) -> Result<Vec<Pool>> {
+
+async fn fetch_all_pools(rpc_client: &RpcClient, amm_program_id: &Pubkey) -> Result<Vec<Pool>> {
     let mut pools = Vec::new();
 
-    let accounts = rpc_client.get_program_accounts(amm_program_id)?;
+    let accounts = rpc_client.get_program_accounts(amm_program_id).await?;
     for (pubkey, account) in accounts {
         let pool_data = account.data;
         if let Ok(pool) = try_deserialize_unchecked_from_bytes_zc(&pool_data) {
@@ -1418,8 +1419,12 @@ fn prepare_swap_instruction(
 ) -> Result<()> {
     let input_token_program = mint_account_owner_cache.get(&input_token_mint).unwrap().0;
     let output_token_program = mint_account_owner_cache.get(&output_token_mint).unwrap().0;
+    
+    // instruction ran without keypair
+    let keypair = Keypair::new();
+    println!("Incorrect keypair used. please fix this line");
     let swap_base_in_instr = swap_base_input_instr(
-        pool_config,
+        &keypair,
         pool_id,
         pool_state.amm_config,
         pool_state.observation_key,
@@ -1474,7 +1479,7 @@ pub struct MintOperationResult {
 }
 
 pub async fn process_mints(
-    context: &mut ProgramTestContext,
+    mut ctx: &Arc<RefCell<ProgramTestContext>>,
     config: &ClientConfig,
     mint0: &Pubkey,
     mint1: &Pubkey,
@@ -1482,11 +1487,11 @@ pub async fn process_mints(
 ) -> Result<MintOperationResult> {
     let http_url = "https://wider-bold-lake.solana-mainnet.quiknode.pro/ec9c40a286a4a1507cdfcf3923a3cad3e65eaac9/";
     let rpc_client =
-        RpcClient::new_with_commitment(http_url.clone(), CommitmentConfig::confirmed());
+        RpcClient::new_with_commitment(http_url.clone().to_string(), CommitmentConfig::confirmed());
 
     // Read mint0 and mint1 information
-    let mut mint0_account = rpc_client.get_account(mint0)?;
-    let mut mint1_account = rpc_client.get_account(mint1)?;
+    let mut mint0_account = rpc_client.get_account(mint0).await?;
+    let mut mint1_account = rpc_client.get_account(mint1).await?;
 
     let mint0_data = StateWithExtensionsMut::<Mint>::unpack(&mut mint0_account.data)?;
     let mint1_data = StateWithExtensionsMut::<Mint>::unpack(&mut mint1_account.data)?;
@@ -1577,24 +1582,7 @@ pub async fn process_mints(
     instructions.extend(mint_to_ata0_ix);
     instructions.extend(mint_to_ata1_ix);
 
-    let recent_blockhash = rpc_client.get_latest_blockhash()?;
-    let transaction = Transaction::new_signed_with_payer(
-        &instructions,
-        Some(&payer.pubkey()),
-        &[payer, &new_mint0_keypair, &new_mint1_keypair],
-        recent_blockhash,
-    );
-
-    let res = context.banks_client.process_transaction(transaction).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
-
+    process_transaction(&ctx.borrow_mut(), &instructions, Some(&[&new_mint0_keypair, &new_mint1_keypair])).await?;
     // Here you would typically send these instructions in a transaction
     // For brevity, we're skipping the actual sending of transactions
 
@@ -1617,23 +1605,34 @@ fn generate_random_string() -> String {
         .collect()
 }
 
+// pub fn program_test() -> ProgramTest {
+//     let mut program_test = ProgramTest::default();
+
+//     program_test.prefer_bpf(true);
+//     program_test.add_program(
+//         "stacc",
+//         solana_program::pubkey::Pubkey::from_str("6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy").unwrap(),
+//         None,
+//     );
+//     program_test.add_program("spl_token_2022", spl_token_2022::ID, None);
+//     program_test.add_program("spl_token", spl_token::ID, None);
+//     program_test.add_program(
+//         "spl_associated_token_account",
+//         spl_associated_token_account::ID,
+//         None,
+//     );
+//     program_test.add_program("mpl-metadata", mpl_token_metadata::ID, None);
+
+//     program_test
+// }
+
+
 pub fn program_test() -> ProgramTest {
     let mut program_test = ProgramTest::default();
 
     program_test.prefer_bpf(true);
-    program_test.add_program(
-        "stacc",
-        solana_program::pubkey::Pubkey::from_str("6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy").unwrap(),
-        None,
-    );
-    program_test.add_program("spl_token_2022", spl_token_2022::ID, None);
-    program_test.add_program("spl_token", spl_token::ID, None);
-    program_test.add_program(
-        "spl_associated_token_account",
-        spl_associated_token_account::ID,
-        None,
-    );
-    program_test.add_program("mpl-metadata", mpl_token_metadata::ID, None);
+    program_test.add_program("raydium_cp_swap", raydium_cp_swap::ID, None);
+    program_test.add_program("mpl_token_metadata", mpl_token_metadata::ID, None);
 
     program_test
 }
@@ -1642,9 +1641,18 @@ pub fn program_test() -> ProgramTest {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut GLOBAL_INDEX: u64 = 0;
     let mut context = program_test().start_with_context().await;
-    let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
-    let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
-    let payer = read_keypair_file(&pool_config.payer_path)?;
+    // let dir_path = Path::new("/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs");
+    // let pool_config = load_cfg(&"/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/client_config.ini".to_string())?;
+    
+    let dir_path = Path::new("cp-swap-txs");
+    let pool_config = load_cfg(&"client_config.ini".to_string())?;
+    
+    let payer = keypair_clone(&context.payer);
+    // let payer = read_keypair_file(&pool_config.payer_path)?;
+    // let ctx = Arc::new(Mutex::new(context));
+    let ctx_ref = RefCell::new(context);
+    let ctx = Arc::new(ctx_ref);
+
     let program_id = pool_config.raydium_cp_program;
     let rpc_client =
         RpcClient::new_with_commitment(pool_config.http_url.clone(), CommitmentConfig::confirmed());
@@ -1703,8 +1711,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for instruction in all_instructions {
             let raydium_cp_command = instruction.to_raydium_cp_commands();
-            execute_raydium_command(
-                &mut context, 
+            let _ = execute_raydium_command(
+                &ctx.clone(), 
                 &rpc_client,
                 &pool_config,
                 &payer,
@@ -1721,7 +1729,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn execute_raydium_command(
-    context: &mut ProgramTestContext,
+    mut ctx: &Arc<RefCell<ProgramTestContext>>,
     rpc_client: &RpcClient,
     pool_config: &ClientConfig,
     payer: &Keypair,
@@ -1738,30 +1746,15 @@ async fn execute_raydium_command(
             token_1_creator_rate,
         } => {
             let initialize_amm_config_instr = initialize_amm_config_instr(
-                &pool_config,
+                payer,
                 *index,
                 *token_0_creator_rate,
                 *token_1_lp_rate,
                 *token_0_lp_rate,
                 *token_1_creator_rate,
             )?;
-            let signers = vec![payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &initialize_amm_config_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
+            // signers is None, because payer already signs inside process_transaction
+            process_transaction(ctx.borrow_mut(), &initialize_amm_config_instr, None).await?;
         }
         RaydiumCpCommands::InitializePool {
             mint0,
@@ -1779,13 +1772,9 @@ async fn execute_raydium_command(
             } else {
                 (mint0, mint1, *init_amount_0, *init_amount_1, *open_time)
             };
-            let result = process_mints(context, pool_config, &mint0, &mint1, payer).await.unwrap();
+            let result = process_mints(ctx.borrow_mut(), pool_config, &mint0, &mint1, payer).await.unwrap();
             let mint_0_info = result.mint0_info;
             let mint_1_info = result.mint1_info;
-            let mint_0 = result.new_mint0;
-            let mint_1 = result.new_mint1;
-            let payer_ata_0 = result.payer_ata0;
-            let payer_ata_1 = result.payer_ata1;
             let token_0_program = mint_0_info.owner;
             let token_1_program = mint_1_info.owner;
             let lp_mint = Keypair::new();
@@ -1794,7 +1783,7 @@ async fn execute_raydium_command(
             let name = generate_random_string();
 
             let initialize_pool_instr = initialize_pool_instr(
-                pool_config,
+                payer,
                 *mint0,
                 *mint1,
                 token_0_program,
@@ -1810,29 +1799,13 @@ async fn execute_raydium_command(
                 lp_mint.pubkey(),
                 config_index,
             )?;
-            let signers = vec![payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &initialize_pool_instr,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
+            process_transaction(&ctx.borrow_mut(), &initialize_pool_instr, None).await?;
         }
         RaydiumCpCommands::Deposit {
             pool_id,
             lp_token_amount,
         } => {
-            let pool_account = rpc_client.get_account(&pool_id)?;
+            let pool_account = rpc_client.get_account(&pool_id).await?;
             let discriminator = &pool_account.data[0..8];
             let token_0_vault = Pubkey::new_from_array(
                 *<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap(),
@@ -1880,7 +1853,7 @@ async fn execute_raydium_command(
             };
 
             let load_pubkeys = vec![token_0_vault, token_1_vault];
-            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
+            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys).await?;
             let [token_0_vault_account, token_1_vault_account] = array_ref![rsps, 0, 2];
             let user_token_0 =
                 spl_associated_token_account::get_associated_token_address_with_program_id(
@@ -1935,7 +1908,7 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 amount_0_with_slippage,
                 amount_1_with_slippage,
-            );
+            ).await;
             println!(
                 "transfer_fee_0:{}, transfer_fee_1:{}",
                 transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
@@ -1958,7 +1931,7 @@ async fn execute_raydium_command(
             );
 
             // Check if user's LP token account exists, create if not
-            if rpc_client.get_account(&user_lp_token).is_err() {
+            if rpc_client.get_account(&user_lp_token).await.is_err() {
                 let create_ata_ix =
                     spl_associated_token_account::instruction::create_associated_token_account(
                         &payer.pubkey(),
@@ -1969,7 +1942,7 @@ async fn execute_raydium_command(
                 maybe_add_instruction(&mut instructions, create_ata_ix);
             }
             let deposit_instr = deposit_instr(
-                &pool_config,
+                payer,
                 *pool_id,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
@@ -1987,30 +1960,17 @@ async fn execute_raydium_command(
                 amount_1_max * 10000000,
             )?;
             instructions.extend(deposit_instr);
-            let signers = vec![&payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
+
+            process_transaction(ctx.borrow_mut(), &instructions, None).await?;
+
+            
         }
         RaydiumCpCommands::Withdraw {
             pool_id,
             user_lp_token,
             lp_token_amount,
         } => {
-            let pool_account = rpc_client.get_account(&pool_id)?;
+            let pool_account = rpc_client.get_account(&pool_id).await?;
             let discriminator = &pool_account.data[0..8];
             let token_0_vault = Pubkey::new_from_array(
                 *<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap(),
@@ -2055,7 +2015,7 @@ async fn execute_raydium_command(
             };
 
             let load_pubkeys = vec![pool_state.token_0_vault, pool_state.token_1_vault];
-            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
+            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys).await?;
             let [token_0_vault_account, token_1_vault_account] = array_ref![rsps, 0, 2];
             // docode account
             let mut token_0_vault_data = token_0_vault_account.clone().unwrap().data;
@@ -2096,7 +2056,7 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 amount_0_with_slippage,
                 amount_1_with_slippage,
-            );
+            ).await;
             println!(
                 "transfer_fee_0:{}, transfer_fee_1:{}",
                 transfer_fee.0.transfer_fee, transfer_fee.1.transfer_fee
@@ -2114,7 +2074,7 @@ async fn execute_raydium_command(
             let mut instructions = Vec::new();
 
             let withdraw_instr = withdraw_instr(
-                pool_config,
+                payer,
                 *pool_id,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
@@ -2132,23 +2092,9 @@ async fn execute_raydium_command(
                 amount_1_min,
             )?;
             instructions.extend(withdraw_instr);
-            let signers = vec![payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
+            
+
+            process_transaction(ctx.borrow_mut(), &instructions, None).await?;
         }
 
         RaydiumCpCommands::SwapBaseIn {
@@ -2156,7 +2102,7 @@ async fn execute_raydium_command(
             user_input_token,
             user_input_amount,
         } => {
-            let pool_account = rpc_client.get_account(&pool_id)?;
+            let pool_account = rpc_client.get_account(&pool_id).await?;
             let discriminator = &pool_account.data[0..8];
             let token_0_vault = Pubkey::new_from_array(
                 *<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap(),
@@ -2211,8 +2157,8 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 *user_input_token,
             ];
-            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
-            let epoch = rpc_client.get_epoch_info().unwrap().epoch;
+            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys).await?;
+            let epoch = rpc_client.get_epoch_info().await.unwrap().epoch;
             let [amm_config_account, token_0_vault_account, token_1_vault_account, token_0_mint_account, token_1_mint_account, user_input_token_account] =
                 array_ref![rsps, 0, 6];
             // docode account
@@ -2288,7 +2234,7 @@ async fn execute_raydium_command(
                     get_transfer_fee(&token_1_mint_info, epoch, *user_input_amount),
                 )
             };
-            let (input_token_creator_rate, input_token_lp_rate) = match trade_direction {
+            let (output_token_creator_rate, output_token_lp_rate) = match trade_direction {
                 raydium_cp_swap::curve::TradeDirection::ZeroForOne => (
                     amm_config_state.token_0_creator_rate,
                     amm_config_state.token_0_lp_rate,
@@ -2299,15 +2245,18 @@ async fn execute_raydium_command(
                 ),
             };
 
-            let protocol_fee = (input_token_creator_rate + input_token_lp_rate) / 10000 * 2;
+            let total_fee = output_token_creator_rate + output_token_lp_rate;
+            let protocol_fee = total_fee / 10000 * 2;
             // Take transfer fees into account for actual amount transferred in
             let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
+
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_input(
                 u128::from(actual_amount_in),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
-                input_token_creator_rate,
-                input_token_lp_rate,
+                total_fee,
+                protocol_fee,
+                output_token_creator_rate
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -2334,7 +2283,7 @@ async fn execute_raydium_command(
             )?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_input_instr(
-                &pool_config,
+                payer,
                 *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
@@ -2350,30 +2299,15 @@ async fn execute_raydium_command(
                 minimum_amount_out,
             )?;
             instructions.extend(swap_base_in_instr);
-            let signers = vec![&payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
+
+            process_transaction(ctx.borrow_mut(), &instructions, None).await?;
         }
         RaydiumCpCommands::SwapBaseOut {
             pool_id,
             user_input_token,
             amount_out_less_fee,
         } => {
-            let pool_account = rpc_client.get_account(&pool_id)?;
+            let pool_account = rpc_client.get_account(&pool_id).await?;
             let discriminator = &pool_account.data[0..8];
             let token_0_vault = Pubkey::new_from_array(
                 *<&[u8; 32]>::try_from(&pool_account.data[72..104]).unwrap(),
@@ -2427,8 +2361,8 @@ async fn execute_raydium_command(
                 pool_state.token_1_mint,
                 *user_input_token,
             ];
-            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys)?;
-            let epoch = rpc_client.get_epoch_info().unwrap().epoch;
+            let rsps = rpc_client.get_multiple_accounts(&load_pubkeys).await?;
+            let epoch = rpc_client.get_epoch_info().await.unwrap().epoch;
             let [amm_config_account, token_0_vault_account, token_1_vault_account, token_0_mint_account, token_1_mint_account, user_input_token_account] =
                 array_ref![rsps, 0, 6];
             // docode account
@@ -2516,13 +2450,16 @@ async fn execute_raydium_command(
                 ),
             };
 
+            let total_fee = input_token_creator_rate + input_token_lp_rate;
+            let protocol_fee = total_fee / 10000 * 2;
             let protocol_fee = (input_token_creator_rate + input_token_lp_rate) / 10000 * 2;
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_output(
                 u128::from(actual_amount_out),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
-                input_token_creator_rate,
-                input_token_lp_rate,
+                total_fee,
+                protocol_fee,
+                input_token_creator_rate
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -2552,7 +2489,7 @@ async fn execute_raydium_command(
             )?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_output_instr(
-                &pool_config,
+                &payer,
                 *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
@@ -2568,24 +2505,8 @@ async fn execute_raydium_command(
                 *amount_out_less_fee,
             )?;
             instructions.extend(swap_base_in_instr);
-            let signers = vec![&payer];
-            let recent_hash = rpc_client.get_latest_blockhash()?;
-            let txn = Transaction::new_signed_with_payer(
-                &instructions,
-                Some(&payer.pubkey()),
-                &signers,
-                recent_hash,
-            );
-            let res = context.banks_client.process_transaction(txn).await;
-            match res {
-                Ok(res) => {
-                    println!("Transaction executed. Result: {:?}", res);
-                }
-                Err(err) => {
-                    println!("Transaction failed. Error: {:?}", err);
-                }
-            }
-            
+
+            process_transaction(ctx.borrow_mut(), &instructions, None).await?;
         }
     }
     Ok(())

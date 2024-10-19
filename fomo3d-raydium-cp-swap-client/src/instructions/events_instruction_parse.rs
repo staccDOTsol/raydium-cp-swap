@@ -1,11 +1,10 @@
 use anchor_client::ClientError;
 use anchor_lang::Discriminator;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use colorful::Color;
 use colorful::Colorful;
 use hex;
 use raydium_cp_swap::instruction;
-use raydium_cp_swap::states::*;
 use regex::Regex;
 use solana_transaction_status::UiInstruction;
 use solana_transaction_status::UiParsedInstruction;
@@ -15,7 +14,6 @@ use solana_transaction_status::{
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
-use anchor_lang::error::ErrorCode;
 
 pub enum InstructionDecodeType {
     BaseHex,
@@ -358,10 +356,10 @@ pub fn handle_program_instruction(
             match decode_instruction::<instruction::CreateAmmConfig>(&mut ix_data) {
                 Ok(ix) => Ok(ChainInstructions::CreateAmmConfig {
                     index: ix.index as u16,
-                    trade_fee_rate: ix.token_0_creator_rate,
-                    protocol_fee_rate: ix.token_1_lp_rate,
-                    fund_fee_rate: ix.token_0_lp_rate,
-                    create_pool_fee: ix.token_1_creator_rate,
+                    trade_fee_rate: ix.trade_fee_rate,
+                    protocol_fee_rate: ix.protocol_fee_rate,
+                    fund_fee_rate: ix.fund_fee_rate,
+                    create_pool_fee: ix.create_pool_fee,
                 }),
                 Err(e) => Err(anyhow::anyhow!(
                     "Failed to decode CreateAmmConfig instruction: {}",
