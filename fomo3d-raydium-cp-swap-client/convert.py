@@ -80,7 +80,7 @@ def process_file_content(content):
     # # Balance the brackets 
     content = balance_json_brackets(content)
     # # Replace program_id
-    content.replace('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C', '6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy')
+    content = content.replace('CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C', '6xPaJUuGmeTS19NJrya76jRNQSnxmH1vCj8SMvLutKwy')
     
     # # content = content.replace()
     content = add_quotes(content)
@@ -118,24 +118,42 @@ def process_file_content(content):
 
         return ''.join(result)
     
-    def find_closing_bracket(input_str, open_pos):
-        if input_str[open_pos] != '[':
-            return -1  # Return -1 if the character at open_pos is not an open bracket
+    def remove_unmatched_closing_parantheses(s):
+        result = []
+        open_parentheses = 0
+
+        for char in reversed(s):
+            if char == ')':
+                open_parentheses += 1
+                result.append(char)
+            elif char == '(':
+                if open_parentheses > 0:
+                    open_parentheses -= 1
+                    result.append(char)
+            else:
+                result.append(char)
         
-        stack = 0  # Counter to keep track of open brackets
+        return ''.join(reversed(result))
+
         
-        # Start searching from the position after the open bracket
-        for i in range(open_pos, len(input_str)):
-            if input_str[i] == '[':
-                stack += 1  # Increment stack for each open bracket
-            elif input_str[i] == ']':
-                stack -= 1  # Decrement stack for each closing bracket
+    
+    def find_all_ending_indices(input_str, starting_indices, char_0, char_1):
+        closing_indices = []
+        for start in starting_indices:
+            stack = 1  # Counter to keep track of open brackets
+            # Start searching from the position after the open bracket
+            for i in range(start + 1, len(input_str)):
+                if input_str[i] == char_0:
+                    stack += 1  # Increment stack for each open bracket
+                elif input_str[i] == char_1:
+                    stack -= 1  # Decrement stack for each closing bracket
+                # If stack reaches 0, it means we found the matching closing bracket
+                if stack == 0:
+                    closing_indices.append(i)
+                    break
                 
-            # If stack reaches 0, it means we found the matching closing bracket
-            if stack == 0:
-                return i
         
-        return -1  # Return -1 if no matching closing bracket is found
+        return closing_indices # Return -1 if no matching closing bracket is found
 
     def find_all_occurrences(main_string, substring):
         start = 0
@@ -147,6 +165,38 @@ def process_file_content(content):
             indices.append(start + len(substring))
             start += len(substring)
         return indices
+
+    
+    def remove_substrings(original_str, start_indices, end_indices):
+        if len(start_indices) != len(end_indices):
+            raise ValueError("Start and end indices lists must have the same length.")
+
+        # Convert string to a list to easily manipulate it
+        char_list = list(original_str)
+        
+        # Iterate over start and end indices in reverse order to avoid index shifting issues
+        for start, end in sorted(zip(start_indices, end_indices), reverse=True):
+            # Remove the substring from start to end (inclusive)
+            del char_list[start+1:end]
+
+        # Join the list back into a string
+        return ''.join(char_list)
+    
+    def remove_substrings_return_data(original_str, start_indices, end_indices):
+        if len(start_indices) != len(end_indices):
+            raise ValueError("Start and end indices lists must have the same length.")
+
+        # Convert string to a list to easily manipulate it
+        char_list = list(original_str)
+        
+        # Iterate over start and end indices in reverse order to avoid index shifting issues
+        for start, end in sorted(zip(start_indices, end_indices), reverse=True):
+            # Remove the substring from start to end (inclusive)
+            char_list[start:end+1] = list("null") 
+
+        # Join the list back into a string
+        return ''.join(char_list)
+
     
 
     # # Remove unmatched parentheses from content
@@ -166,14 +216,16 @@ def process_file_content(content):
     content = content.replace("Array", "")
     content = balance_json_brackets(content)
     content = content.replace("Program \"log\"", "Program log")
+    content = content.replace("Skip", "null")
     starting_indices = find_all_occurrences(content, "\"log_messages\": ")
+    ending_indices = find_all_ending_indices(content, starting_indices, '[', ']')
+    result = remove_substrings(content, starting_indices, ending_indices)
 
-    result = ""
-    for start_index in starting_indices:
-        closing_index = find_closing_bracket(content, start_index)
-        result += content[:start_index] + "[" + content[closing_index:]
+    starting_indices = find_all_occurrences(result, "\"return_data\":  ")
+    ending_indices = find_all_ending_indices(result, starting_indices, '{', '}')
+    result = remove_substrings_return_data(result, starting_indices, ending_indices)
+    # result = remove_unmatched_closing_parantheses(result)
 
-    result = result.replace("Skip", "null")
     
     return result
 
@@ -194,6 +246,7 @@ def process_files_in_folder(folder_path):
                 with open(file_path, 'w') as f:
                     f.write(new_content)
                 print(f'Processed: {file_path}')
+
 
 if __name__ == "__main__":
     folder_path = "/Users/jackfisher/Desktop/new-audits/raydium-cp-swap/fomo3d-raydium-cp-swap-client/cp-swap-txs"
