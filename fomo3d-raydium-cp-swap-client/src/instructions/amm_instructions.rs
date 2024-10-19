@@ -1,12 +1,12 @@
 use anchor_client::{Client, Cluster};
-use anchor_lang::Key;
 use anyhow::Result;
-use raydium_cp_swap::accounts::CreateAmmConfig;
 use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use solana_sdk::{instruction::Instruction, pubkey::Pubkey, system_program, sysvar};
 
+use anchor_lang::ToAccountMetas;
+use anchor_lang::InstructionData;
 use raydium_cp_swap::accounts as raydium_cp_accounts;
 use raydium_cp_swap::instruction as raydium_cp_instructions;
 use raydium_cp_swap::{
@@ -14,7 +14,7 @@ use raydium_cp_swap::{
     AUTH_SEED,
 };
 use std::rc::Rc;
-use raydium_cp_swap::instructions::InitializeMetadata;
+
 use super::super::{read_keypair_file, ClientConfig};
 
 pub fn collect_protocol_fee_instr(
@@ -110,43 +110,44 @@ pub fn collect_fund_fee_instr(
     instructions.insert(0, compute_budget_ix);
     Ok(instructions)
 }
+
 pub fn initialize_amm_config_instr(
-    config: &ClientConfig,
+    payer: &Keypair,
     amm_config_index: u64,
     trade_fee_rate: u64,
     protocol_fee_rate: u64,
     fund_fee_rate: u64,
     create_pool_fee: u64,
 ) -> Result<Vec<Instruction>> {
-    let payer = read_keypair_file(&config.payer_path);
-    let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
-    let client = Client::new(url, Rc::new(payer.expect("Failed to get payer keypair")));
-    let program = client.program(config.raydium_cp_program)?;
+    let raydium_cp_swap_program_id = raydium_cp_swap::ID;
 
     let (amm_config_key, _bump) = Pubkey::find_program_address(
         &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
-        &program.id(),
+        &raydium_cp_swap_program_id,
     );
 
-    let accounts = CreateAmmConfig {
+
+    let create_amm_instruction_args = raydium_cp_instructions::CreateAmmConfig {
+        index:amm_config_index,
+        trade_fee_rate,
+        protocol_fee_rate,
+        fund_fee_rate,
+        create_pool_fee,
+    }.data();
+
+    let create_amm_instruction_accounts = raydium_cp_accounts::CreateAmmConfig {
+        owner: payer.pubkey(),
         amm_config: amm_config_key,
-        owner: program.payer(),
-        system_program: system_program::ID,
+        system_program: solana_sdk::system_program::id(),   
+    }.to_account_metas(None);
+
+    let create_amm_instruction_ix = Instruction {
+        program_id: raydium_cp_swap_program_id,
+        accounts: create_amm_instruction_accounts,
+        data: create_amm_instruction_args,
     };
 
-    let ix = program
-        .request()
-        .accounts(accounts)
-        .args(raydium_cp_instructions::CreateAmmConfig {
-            index: amm_config_index,
-            trade_fee_rate,
-            protocol_fee_rate,
-            fund_fee_rate,
-            create_pool_fee,
-        })
-        .instructions()?;
-
-    Ok(ix)
+    Ok(vec![create_amm_instruction_ix])
 }
 pub fn initialize_pool_instr(
     config: &ClientConfig,

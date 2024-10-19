@@ -27,7 +27,7 @@ const MAX_CONCURRENT_REQUESTS: usize = 20;
 // use only if RPC is rate limiting
 // const RATE_LIMIT_DELAY: Duration = Duration::from_millis(10);
 const CP_SWAP_PUBLICKEYS: &str = "fomo3d-raydium-cp-swap-client/cp-swap.txt";
-const CP_SWAP_FOLDER: &str = "cp-swap-txs";
+const CP_SWAP_FOLDER: &str = "fomo3d-raydium-cp-swap-client/cp-swap-txs";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -163,7 +163,12 @@ async fn fetch_all_signatures(client: &RpcClient, pubkey: &Pubkey) -> Result<Vec
             break;
         }
 
-        all_signatures.extend(signatures.iter().map(|sig| sig.signature.clone()));
+        all_signatures.extend(
+            signatures
+                .iter()
+                .filter(|sig| sig.err.is_none())
+                .map(|sig| sig.signature.clone())
+        );
 
         before = signatures
             .last()

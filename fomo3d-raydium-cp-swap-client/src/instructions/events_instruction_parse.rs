@@ -1,11 +1,10 @@
 use anchor_client::ClientError;
 use anchor_lang::Discriminator;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use colorful::Color;
 use colorful::Colorful;
 use hex;
 use raydium_cp_swap::instruction;
-use raydium_cp_swap::states::*;
 use regex::Regex;
 use solana_transaction_status::UiInstruction;
 use solana_transaction_status::UiParsedInstruction;
@@ -15,7 +14,6 @@ use solana_transaction_status::{
 
 const PROGRAM_LOG: &str = "Program log: ";
 const PROGRAM_DATA: &str = "Program data: ";
-use anchor_lang::error::ErrorCode;
 
 pub enum InstructionDecodeType {
     BaseHex,
