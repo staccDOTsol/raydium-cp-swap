@@ -215,4 +215,20 @@ pub mod raydium_cp_swap {
     pub fn swap_base_output(ctx: Context<Swap>, max_amount_in: u64, amount_out: u64) -> Result<()> {
         instructions::swap_base_output(ctx, max_amount_in, amount_out)
     }
+
+    /// Swap the tokens in the pool base output amount
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx`- The context of accounts
+    /// * `name` - mint metadata name
+    /// * `symbol` - mint metadata symbol
+    /// * `uri` - mint metadata uri
+    ///
+    pub fn initialize_metadata(ctx: Context<InitializeMetadata>, 
+        name: String,
+        symbol: String,
+        uri: String,) -> Result<()> {
+        instructions::initialize_metadata(ctx, name, symbol, uri)
+    }
 }

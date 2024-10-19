@@ -1809,7 +1809,7 @@ dependencies = [
  "lazy_static",
  "mpl-token-metadata",
  "rand 0.8.5",
- "raydium-cp-swap 0.1.1392",
+ "raydium-cp-swap",
  "regex",
  "serde",
  "serde_json",
@@ -1827,7 +1827,7 @@ dependencies = [
  "spl-memo 3.0.1",
  "spl-token 3.5.0",
  "spl-token-2022 0.9.0",
- "spl-token-client",
+ "spl-token-client 0.7.1",
  "thiserror",
  "tokio",
 ]
@@ -3466,37 +3466,28 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "arrayref",
+ "borsh 0.10.4",
  "bytemuck",
+ "env_logger 0.9.3",
+ "log",
  "mpl-token-metadata",
  "num-traits",
  "proptest",
  "quickcheck",
  "rand 0.8.5",
+ "solana-program",
+ "solana-program-test",
+ "solana-sdk",
  "solana-security-txt",
+ "spl-associated-token-account 3.0.4",
  "spl-math",
  "spl-memo 4.0.0",
+ "spl-tlv-account-resolution 0.6.5",
  "spl-token 4.0.0",
  "spl-token-2022 3.0.4",
- "uint",
-]
-
-[[package]]
-name = "raydium-cp-swap"
-version = "0.1.1392"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf40f2704e0935f14e5b85d65c804d5e4099ad012e664ad03e902224c7726a2"
-dependencies = [
- "anchor-lang",
- "anchor-spl",
- "arrayref",
- "bytemuck",
- "mpl-token-metadata",
- "num-traits",
- "solana-security-txt",
- "spl-math",
- "spl-memo 4.0.0",
- "spl-token 4.0.0",
- "spl-token-2022 3.0.4",
+ "spl-token-client 0.10.1",
+ "spl-transfer-hook-example",
+ "spl-transfer-hook-interface 0.6.5",
  "uint",
 ]
 
@@ -5688,6 +5679,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "spl-token-client"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6cb6cb970d91422060de53f5ffc106003a56ca8b2e37ae814b7d174187a4d09"
+dependencies = [
+ "async-trait",
+ "curve25519-dalek",
+ "futures",
+ "futures-util",
+ "solana-banks-interface",
+ "solana-cli-output",
+ "solana-program-test",
+ "solana-rpc-client",
+ "solana-rpc-client-api",
+ "solana-sdk",
+ "spl-associated-token-account 3.0.4",
+ "spl-memo 4.0.0",
+ "spl-token 4.0.0",
+ "spl-token-2022 3.0.4",
+ "spl-token-group-interface 0.2.5",
+ "spl-token-metadata-interface 0.3.5",
+ "spl-transfer-hook-interface 0.6.5",
+ "thiserror",
+]
+
+[[package]]
 name = "spl-token-group-interface"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5738,6 +5755,20 @@ dependencies = [
  "spl-discriminator 0.2.5",
  "spl-pod 0.2.5",
  "spl-program-error 0.4.4",
+ "spl-type-length-value 0.4.6",
+]
+
+[[package]]
+name = "spl-transfer-hook-example"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dea8c4ea17c18e6126c7f332b2e55cda99660cb67ad19e494c4c2fde49287e23"
+dependencies = [
+ "arrayref",
+ "solana-program",
+ "spl-tlv-account-resolution 0.6.5",
+ "spl-token-2022 3.0.4",
+ "spl-transfer-hook-interface 0.6.5",
  "spl-type-length-value 0.4.6",
 ]
 

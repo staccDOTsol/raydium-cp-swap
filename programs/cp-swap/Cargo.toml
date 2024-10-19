@@ -17,6 +17,7 @@ cpi = ["no-entrypoint"]
 default = []
 enable-log = []
 devnet = []
+local-testing = []
 fomo3d-raydium-cp-swap-client = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 
@@ -38,6 +39,17 @@ num-traits = "0.2.19"
 quickcheck = "0.9"
 proptest = "1.0"
 rand = "0.8.5"
+borsh = "0.10.3"
+spl-tlv-account-resolution = { version = "0.6.3" }
+spl-transfer-hook-interface = { version = "0.6.3" }
+spl-associated-token-account = { version = "^3.0.2", features = ["no-entrypoint"] }
+spl-transfer-hook-example = { version = "0.6.0", features = ["no-entrypoint"] }
+solana-sdk = "1.18.18"
+solana-program-test = "1.18.18"
+log = "0.4.14"
+env_logger = "0.9.0"
+spl-token-client = "0.10.0"
+solana-program = "1.18.18"
 
 [profile.release]
 lto = true
