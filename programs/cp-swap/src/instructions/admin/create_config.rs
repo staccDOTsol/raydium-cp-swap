@@ -9,7 +9,6 @@ pub struct CreateAmmConfig<'info> {
     /// Address to be set as protocol owner.
     #[account(
         mut,
-        address = crate::admin::id() @ ErrorCode::InvalidOwner
     )]
     pub owner: Signer<'info>,
 
@@ -37,6 +36,13 @@ pub fn create_amm_config(
     token_0_creator_rate: u64,
     token_1_creator_rate: u64,
 ) -> Result<()> {
+    let owner = ctx.accounts.owner.key();
+    
+    #[cfg(not(feature = "local-testing"))]
+    if owner != crate::admin::id() {
+        return Err(ErrorCode::InvalidOwner.into());
+    }
+    
     let amm_config = ctx.accounts.amm_config.deref_mut();
     amm_config.protocol_owner = crate::admin::id();
     amm_config.bump = ctx.bumps.amm_config;

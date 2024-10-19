@@ -17,6 +17,7 @@ cpi = ["no-entrypoint"]
 default = []
 enable-log = []
 devnet = []
+local-testing = []
 fomo3d-raydium-cp-swap-client = []
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 

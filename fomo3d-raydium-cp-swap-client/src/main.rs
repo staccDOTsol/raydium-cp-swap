@@ -1253,7 +1253,7 @@ fn calculate_swap_output(
     let amm_config_state: AmmConfig = AnchorDeserialize::deserialize(&mut &amm_config_data[8..])
         .map_err(|e| format_err!("Failed to deserialize AmmConfig: {}", e))?;
 
-    let (input_token_creator_rate, input_token_lp_rate) = if from_token == pool.token_0_mint {
+    let (output_token_creator_rate, output_token_lp_rate) = if from_token == pool.token_0_mint {
         (
             amm_config_state.token_0_creator_rate,
             amm_config_state.token_0_lp_rate,
@@ -1264,14 +1264,18 @@ fn calculate_swap_output(
             amm_config_state.token_1_lp_rate,
         )
     };
+    let total_fee = output_token_creator_rate + output_token_lp_rate;
+    let protocol_fee = total_fee / 10000 * 2;
 
     // Use Raydium's CurveCalculator to compute the swap output
     let result = CurveCalculator::swap_base_input(
         u128::from(amount_in),
         u128::from(total_input_amount),
         u128::from(total_output_amount),
-        input_token_creator_rate,
-        input_token_lp_rate,
+        total_fee,
+        protocol_fee,
+        output_token_creator_rate,
+
     )
     .ok_or(format_err!("Swap calculation failed"))?;
 
@@ -2154,7 +2158,7 @@ fn execute_raydium_command(
                     get_transfer_fee(&token_1_mint_info, epoch, *user_input_amount),
                 )
             };
-            let (input_token_creator_rate, input_token_lp_rate) = match trade_direction {
+            let (output_token_creator_rate, output_token_lp_rate) = match trade_direction {
                 raydium_cp_swap::curve::TradeDirection::ZeroForOne => (
                     amm_config_state.token_0_creator_rate,
                     amm_config_state.token_0_lp_rate,
@@ -2165,15 +2169,18 @@ fn execute_raydium_command(
                 ),
             };
 
-            let protocol_fee = (input_token_creator_rate + input_token_lp_rate) / 10000 * 2;
+            let total_fee = output_token_creator_rate + output_token_lp_rate;
+            let protocol_fee = total_fee / 10000 * 2;
             // Take transfer fees into account for actual amount transferred in
             let actual_amount_in = user_input_amount.saturating_sub(transfer_fee);
+
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_input(
                 u128::from(actual_amount_in),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
-                input_token_creator_rate,
-                input_token_lp_rate,
+                total_fee,
+                protocol_fee,
+                output_token_creator_rate
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();
@@ -2375,13 +2382,16 @@ fn execute_raydium_command(
                 ),
             };
 
+            let total_fee = input_token_creator_rate + input_token_lp_rate;
+            let protocol_fee = total_fee / 10000 * 2;
             let protocol_fee = (input_token_creator_rate + input_token_lp_rate) / 10000 * 2;
             let result = raydium_cp_swap::curve::CurveCalculator::swap_base_output(
                 u128::from(actual_amount_out),
                 u128::from(total_input_token_amount),
                 u128::from(total_output_token_amount),
-                input_token_creator_rate,
-                input_token_lp_rate,
+                total_fee,
+                protocol_fee,
+                input_token_creator_rate
             )
             .ok_or(raydium_cp_swap::error::ErrorCode::ZeroTradingTokens)
             .unwrap();

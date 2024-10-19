@@ -14,7 +14,7 @@ use raydium_cp_swap::{
     AUTH_SEED,
 };
 use std::rc::Rc;
-
+use raydium_cp_swap::instructions::InitializeMetadata;
 use super::super::{read_keypair_file, ClientConfig};
 
 pub fn collect_protocol_fee_instr(
@@ -113,10 +113,10 @@ pub fn collect_fund_fee_instr(
 pub fn initialize_amm_config_instr(
     config: &ClientConfig,
     amm_config_index: u64,
-    token_0_creator_rate: u64,
-    token_1_lp_rate: u64,
-    token_0_lp_rate: u64,
-    token_1_creator_rate: u64,
+    trade_fee_rate: u64,
+    protocol_fee_rate: u64,
+    fund_fee_rate: u64,
+    create_pool_fee: u64,
 ) -> Result<Vec<Instruction>> {
     let payer = read_keypair_file(&config.payer_path);
     let url = Cluster::Custom(config.http_url.clone(), config.ws_url.clone());
@@ -139,10 +139,10 @@ pub fn initialize_amm_config_instr(
         .accounts(accounts)
         .args(raydium_cp_instructions::CreateAmmConfig {
             index: amm_config_index,
-            token_0_creator_rate,
-            token_1_lp_rate,
-            token_0_lp_rate,
-            token_1_creator_rate,
+            trade_fee_rate,
+            protocol_fee_rate,
+            fund_fee_rate,
+            create_pool_fee,
         })
         .instructions()?;
 
