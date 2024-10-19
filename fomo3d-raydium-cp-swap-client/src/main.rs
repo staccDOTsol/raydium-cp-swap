@@ -1466,6 +1466,7 @@ fn maybe_add_instruction(instructions: &mut Vec<Instruction>, new_instruction: I
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct MintInfo {
     pub mint_authority: Option<Pubkey>,
     pub supply: u64,
@@ -1475,6 +1476,7 @@ pub struct MintInfo {
     pub owner: Pubkey,
 }
 
+#[derive(Debug, Clone)]
 pub struct MintOperationResult {
     pub mint0_info: MintInfo,
     pub mint1_info: MintInfo,
@@ -1510,7 +1512,7 @@ pub async fn process_mints(
         freeze_authority: None,
         owner: mint0_account.owner,
     };
-
+    println!("mint0_info: {:?}", mint0_info);
     let mint1_info = MintInfo {
         mint_authority: Some(payer.pubkey()),
         supply: mint1_data.base.supply,
@@ -1519,13 +1521,13 @@ pub async fn process_mints(
         freeze_authority: None,
         owner: mint1_account.owner,
     };
+    println!("mint1_info: {:?}", mint1_info);
     
     // Get token program for each mint
     let token_program0 = mint0_account.owner;
     let token_program1 = mint1_account.owner;
 
-    let new_mint0_keypair = Keypair::new();
-    let new_mint1_keypair = Keypair::new();
+    let (new_mint0_keypair, new_mint1_keypair) = generate_valid_token_mint_keypairs();
     // Create new mint accounts
     let new_mint0 = new_mint0_keypair.pubkey();
     let new_mint1 = new_mint1_keypair.pubkey();
@@ -1553,9 +1555,9 @@ pub async fn process_mints(
     .await?;
 
     let payer_ata0 =
-        spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint0);
+        spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &new_mint0);
     let payer_ata1 =
-        spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint1);
+        spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &new_mint1);
     // Create ATA accounts for payer
     let payer_ata0_instr =
         create_ata_token_account_instr(token_program0, &new_mint0, &payer.pubkey())?;
@@ -1567,7 +1569,11 @@ pub async fn process_mints(
         token_program0,
         &new_mint0,
         &payer_ata0,
-        mint0_info.supply,
+        if mint0_info.supply > 0 {
+            mint0_info.supply
+        } else {
+            mint1_info.supply
+        },
         &payer, // You might want to use a specific keypair for minting authority
     )?;
 
@@ -1707,6 +1713,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let amm_config_index = GLOBAL_INDEX + 1;
         GLOBAL_INDEX += 1;
+        println!("AMM Config Index: {}", amm_config_index);
         all_instructions.push(ChainInstructions::CreateAmmConfig {
             index: amm_config_index as u16,
             trade_fee_rate: 6666,
@@ -1755,6 +1762,7 @@ async fn execute_raydium_command(
             token_0_lp_rate,
             token_1_creator_rate,
         } => {
+            println!("Initializing AmmConfig");
             let initialize_amm_config_instr = initialize_amm_config_instr(
                 payer,
                 *index,
@@ -1777,6 +1785,7 @@ async fn execute_raydium_command(
             name,
             amm_config_index,
         } => {
+            println!("Initializing pool");
             let (mint0, mint1, init_amount_0, init_amount_1, open_time) = if mint0 > mint1 {
                 (mint1, mint0, *init_amount_1, *init_amount_0, *open_time)
             } else {
@@ -1795,12 +1804,12 @@ async fn execute_raydium_command(
 
             let initialize_pool_instr = initialize_pool_instr(
                 payer,
-                *mint0,
-                *mint1,
+                result.new_mint0,
+                result.new_mint1,
                 token_0_program,
                 token_1_program,
-                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint0),
-                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), mint1),
+                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &result.new_mint0),
+                spl_associated_token_account::get_associated_token_address(&payer.pubkey(), &result.new_mint1),
                 init_amount_0,
                 init_amount_1,
                 open_time,
@@ -1808,7 +1817,7 @@ async fn execute_raydium_command(
                 uri.clone(),
                 name.clone(),
                 lp_mint.pubkey(),
-                config_index,
+                *amm_config_index,
             )?;
             process_transaction(&ctx.borrow_mut(), &initialize_pool_instr, None).await?;
         }
@@ -1816,6 +1825,7 @@ async fn execute_raydium_command(
             pool_id,
             lp_token_amount,
         } => {
+            println!("DEPOSITING");
             let pool_account = rpc_client.get_account(&pool_id).await?;
             let discriminator = &pool_account.data[0..8];
             let token_0_vault = Pubkey::new_from_array(
@@ -2520,4 +2530,14 @@ async fn execute_raydium_command(
     Ok(())
 }
 
-// turn chain instructions into raydium commands
+
+fn generate_valid_token_mint_keypairs() -> (Keypair, Keypair) {
+    loop {
+        let mint0_keypair = Keypair::new();
+        let mint1_keypair = Keypair::new();
+        
+        if mint0_keypair.pubkey().to_bytes() < mint1_keypair.pubkey().to_bytes() {
+            return (mint0_keypair, mint1_keypair);
+        }
+    }
+}

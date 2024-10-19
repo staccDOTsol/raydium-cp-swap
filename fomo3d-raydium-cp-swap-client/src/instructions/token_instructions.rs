@@ -255,7 +255,7 @@ pub fn spl_token_mint_to_instr(
         mint,
         to,
         &mint_authority.pubkey(),
-        &[&mint_authority.pubkey()],
+        &[],
         amount,
     )?])
 }
