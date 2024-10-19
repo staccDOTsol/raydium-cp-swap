@@ -20,6 +20,7 @@ use solana_sdk::compute_budget::ComputeBudgetInstruction;
 use solana_sdk::instruction::Instruction;
 use solana_sdk::instruction::InstructionError;
 use solana_sdk::program_pack::Pack;
+use solana_sdk::signer::keypair;
 use solana_sdk::transaction::TransactionError;
 use solana_sdk::transaction::VersionedTransaction;
 use solana_sdk::{
@@ -1419,8 +1420,12 @@ fn prepare_swap_instruction(
 ) -> Result<()> {
     let input_token_program = mint_account_owner_cache.get(&input_token_mint).unwrap().0;
     let output_token_program = mint_account_owner_cache.get(&output_token_mint).unwrap().0;
+    
+    // instruction ran without keypair
+    let keypair = Keypair::new();
+    println!("Incorrect keypair used. please fix this line");
     let swap_base_in_instr = swap_base_input_instr(
-        pool_config,
+        &keypair,
         pool_id,
         pool_state.amm_config,
         pool_state.observation_key,
@@ -1779,7 +1784,7 @@ async fn execute_raydium_command(
             let name = generate_random_string();
 
             let initialize_pool_instr = initialize_pool_instr(
-                pool_config,
+                payer,
                 *mint0,
                 *mint1,
                 token_0_program,
@@ -1938,7 +1943,7 @@ async fn execute_raydium_command(
                 maybe_add_instruction(&mut instructions, create_ata_ix);
             }
             let deposit_instr = deposit_instr(
-                &pool_config,
+                payer,
                 *pool_id,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
@@ -2070,7 +2075,7 @@ async fn execute_raydium_command(
             let mut instructions = Vec::new();
 
             let withdraw_instr = withdraw_instr(
-                pool_config,
+                payer,
                 *pool_id,
                 pool_state.token_0_mint,
                 pool_state.token_1_mint,
@@ -2279,7 +2284,7 @@ async fn execute_raydium_command(
             )?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_input_instr(
-                &pool_config,
+                payer,
                 *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
@@ -2485,7 +2490,7 @@ async fn execute_raydium_command(
             )?;
             instructions.extend(create_user_output_token_instr);
             let swap_base_in_instr = swap_base_output_instr(
-                &pool_config,
+                &payer,
                 *pool_id,
                 pool_state.amm_config,
                 pool_state.observation_key,
