@@ -180,12 +180,18 @@ pub fn withdraw(
         change_type: 1
     });
 
+    msg!("pool_state: {:?}", pool_state);
+    msg!("lp_token_amount: {}", lp_token_amount);
+
+    msg!("receive_token_0_amount: {:?}", receive_token_0_amount);
+    msg!("minimum_token_0_amount: {:?}", minimum_token_0_amount);
+    msg!("receive_token_1_amount: {:?}", receive_token_1_amount);
+    msg!("minimum_token_1_amount: {}", minimum_token_1_amount);
     if receive_token_0_amount < minimum_token_0_amount
         || receive_token_1_amount < minimum_token_1_amount
     {
         return Err(ErrorCode::ExceededSlippage.into());
     }
-
     pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
