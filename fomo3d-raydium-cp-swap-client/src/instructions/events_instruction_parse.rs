@@ -21,6 +21,7 @@ pub enum InstructionDecodeType {
     Base58,
 }
 
+
 #[derive(Debug)]
 pub enum ChainInstructions {
     CreateAmmConfig {
@@ -71,6 +72,7 @@ pub enum ChainInstructions {
         amount_out: u64,
     },
 }
+
 
 // pub fn parse_program_event(
 //     self_program_str: &str,

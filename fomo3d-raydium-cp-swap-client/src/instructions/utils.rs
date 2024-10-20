@@ -1,6 +1,7 @@
 use anchor_lang::AccountDeserialize;
 use anyhow::Result;
 use solana_client::nonblocking::rpc_client::RpcClient;
+use solana_program_test::ProgramTestContext;
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use spl_token_2022::{
     extension::{
@@ -9,7 +10,9 @@ use spl_token_2022::{
     },
     state::Mint,
 };
-use std::ops::Mul;
+use std::{cell::RefCell, ops::Mul, sync::Arc};
+
+use crate::tests::{get_clock, get_multiple_accounts};
 
 pub fn deserialize_anchor_account<T: AccountDeserialize>(account: &Account) -> Result<T> {
     let mut data: &[u8] = &account.data;
@@ -32,17 +35,17 @@ pub fn amount_with_slippage(amount: u64, slippage: f64, round_up: bool) -> u64 {
 }
 
 pub async fn get_pool_mints_inverse_fee(
-    rpc_client: &RpcClient,
+    context: &Arc<RefCell<ProgramTestContext>>,
     token_mint_0: Pubkey,
     token_mint_1: Pubkey,
     post_fee_amount_0: u64,
     post_fee_amount_1: u64,
 ) -> (TransferFeeInfo, TransferFeeInfo) {
     let load_accounts = vec![token_mint_0, token_mint_1];
-    let rsps = rpc_client.get_multiple_accounts(&load_accounts).await.unwrap();
-    let epoch = rpc_client.get_epoch_info().await.unwrap().epoch;
-    let mut mint0_account = rsps[0].clone().ok_or("load mint0 rps error!").unwrap();
-    let mut mint1_account = rsps[1].clone().ok_or("load mint0 rps error!").unwrap();
+    let rsps = get_multiple_accounts(context, &load_accounts).await;
+    let epoch = get_clock(context).await.epoch;
+    let mut mint0_account = rsps[0].clone();
+    let mut mint1_account = rsps[1].clone();
     let mint0_state = StateWithExtensionsMut::<Mint>::unpack(&mut mint0_account.data).unwrap();
     let mint1_state = StateWithExtensionsMut::<Mint>::unpack(&mut mint1_account.data).unwrap();
     (
@@ -60,17 +63,17 @@ pub async fn get_pool_mints_inverse_fee(
 }
 
 pub async fn get_pool_mints_transfer_fee(
-    rpc_client: &RpcClient,
+    context: &Arc<RefCell<ProgramTestContext>>,
     token_mint_0: Pubkey,
     token_mint_1: Pubkey,
     pre_fee_amount_0: u64,
     pre_fee_amount_1: u64,
 ) -> (TransferFeeInfo, TransferFeeInfo) {
     let load_accounts = vec![token_mint_0, token_mint_1];
-    let rsps = rpc_client.get_multiple_accounts(&load_accounts).await.unwrap();
-    let epoch = rpc_client.get_epoch_info().await.unwrap().epoch;
-    let mut mint0_account = rsps[0].clone().ok_or("load mint0 rps error!").unwrap();
-    let mut mint1_account = rsps[1].clone().ok_or("load mint0 rps error!").unwrap();
+    let rsps = get_multiple_accounts(context, &load_accounts).await;
+    let epoch = get_clock(context).await.epoch;
+    let mut mint0_account = rsps[0].clone();
+    let mut mint1_account = rsps[1].clone();
     let mint0_state = StateWithExtensionsMut::<Mint>::unpack(&mut mint0_account.data).unwrap();
     let mint1_state = StateWithExtensionsMut::<Mint>::unpack(&mut mint1_account.data).unwrap();
     (

@@ -167,7 +167,7 @@ pub fn initialize_pool_instr(
     name: String,
     lp_mint: Pubkey,
     amm_config_index: u64,
-) -> Result<Vec<Instruction>> {
+) -> Result<(Vec<Instruction>, Pubkey)> {
     let raydium_cp_swap_program_id = raydium_cp_swap::ID;
     let (amm_config_key, __bump) = Pubkey::find_program_address(
         &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
@@ -295,7 +295,7 @@ pub fn initialize_pool_instr(
     // };
 
     // instructions.push(metadata_instruction);
-    Ok(instructions)
+    Ok((instructions, pool_account_key))
 }
 
 pub fn deposit_instr(

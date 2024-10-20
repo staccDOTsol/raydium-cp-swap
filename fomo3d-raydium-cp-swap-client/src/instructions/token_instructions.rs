@@ -125,7 +125,7 @@ pub fn create_ata_token_account_instr(
     owner: &Pubkey,
 ) -> Result<Vec<Instruction>> {
     
-    Ok(vec![spl_associated_token_account::instruction::create_associated_token_account(
+    Ok(vec![spl_associated_token_account::instruction::create_associated_token_account_idempotent(
         &owner,
         owner,
         mint,

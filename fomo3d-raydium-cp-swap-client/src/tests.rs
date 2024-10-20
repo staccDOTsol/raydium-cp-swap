@@ -34,6 +34,11 @@ pub async fn process_transaction(
     instructions: &[Instruction],
     signers: Option<&[&Keypair]>,
 ) -> Result<(), BanksClientError> {
+    {
+        let clock = get_clock(ctx).await;
+        let mut context = ctx.borrow_mut();
+        context.warp_to_slot(clock.slot + 5).unwrap()
+    };
     let blockhash = {
         let mut context = ctx.borrow_mut();
         context.get_new_latest_blockhash().await?
@@ -58,14 +63,34 @@ pub async fn process_transaction(
         .await
 }
 
-pub async fn get_account(context: Arc<Mutex<ProgramTestContext>>, pubkey: &Pubkey) -> Account {
-    let context = &mut *context.lock().await;
-    context
+pub async fn get_account(context: &Arc<RefCell<ProgramTestContext>>, pubkey: &Pubkey) -> Account {
+    let mut ctx = context.borrow_mut();
+    ctx
         .banks_client
         .get_account(*pubkey)
         .await
         .unwrap()
         .expect("account not found")
+}
+
+pub async fn get_clock(context: &Arc<RefCell<ProgramTestContext>>) -> solana_program::clock::Clock {
+    let mut ctx = context.borrow_mut();
+    ctx
+    .banks_client
+    .get_sysvar::<solana_program::clock::Clock>()
+    .await
+    .unwrap()
+}
+
+pub async fn get_multiple_accounts(
+    context: &Arc<RefCell<ProgramTestContext>>,
+    pubkeys: &[Pubkey],
+) -> Vec<Account> {
+    let mut accounts = Vec::with_capacity(pubkeys.len());
+    for pubkey in pubkeys {
+        accounts.push(get_account(context, pubkey).await);
+    }
+    accounts
 }
 
 pub fn keypair_clone(kp: &Keypair) -> Keypair {
