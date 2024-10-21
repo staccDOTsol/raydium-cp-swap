@@ -96,11 +96,7 @@ pub fn deposit(
 
 
     let mut amm = pool_state.amm;
-    let buy_result = amm.apply_buy(lp_token_amount.into());
-    if buy_result.is_none() {
-        return err!(ErrorCode::BuyResultNone);
-    }
-    let buy_result = buy_result.unwrap();
+    
     
     if !pool_state.get_status_by_bit(PoolStatusBitIndex::Deposit) {
         return err!(ErrorCode::NotApproved);
@@ -138,11 +134,19 @@ pub fn deposit(
         )
     };
 
+    let real_liquidity = pool_state.lp_supply.checked_add(lp_token_amount).unwrap();
+    let new_supply = amm.apply_buy(real_liquidity.into());
+    if new_supply.is_none() {
+        return err!(ErrorCode::BuyResultNone);
+    }
+    let new_supply = new_supply.unwrap();
+    let current_supply = ctx.accounts.lp_mint.supply;
+    let mint_to = (new_supply as u64).checked_sub(current_supply).unwrap();
     // Magick
-    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
+    // let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
 
-    let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;
-    let transfer_token_1_amount = (transfer_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    // let transfer_token_0_amount = (transfer_token_0_amount as f64 * cost_ratio).ceil() as u64;
+    // let transfer_token_1_amount = (transfer_token_1_amount as f64 * cost_ratio).ceil() as u64;
     pool_state.amm = amm;
     
     #[cfg(feature = "enable-log")]

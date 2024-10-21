@@ -111,8 +111,17 @@ pub fn withdraw(
         ctx.accounts.token_0_vault.amount,
         ctx.accounts.token_1_vault.amount,
     );
+
+    let mut amm = pool_state.amm;
+    let current_supply = ctx.accounts.lp_mint.supply;
+    let virtual_liquidity = current_supply.checked_add(lp_token_amount).unwrap();
+    let real_liquidity = amm.apply_sell(virtual_liquidity as u128);
+    if real_liquidity.is_none() {
+        return err!(ErrorCode::SellResultNone);
+    }
+    let real_liquidity = pool_state.lp_supply.checked_sub(real_liquidity.unwrap() as u64).unwrap();
     let results = CurveCalculator::lp_tokens_to_trading_tokens(
-        u128::from(lp_token_amount),
+        u128::from(real_liquidity),
         u128::from(pool_state.lp_supply),
         u128::from(total_token_0_amount),
         u128::from(total_token_1_amount),
@@ -139,19 +148,15 @@ pub fn withdraw(
             transfer_fee,
         )
     };
-    let mut amm = pool_state.amm;
-    let sell_result = amm.apply_sell(lp_token_amount as u128);
-    if sell_result.is_none() {
-        return err!(ErrorCode::SellResultNone);
-    }
-    let sell_result = sell_result.unwrap();
+   
     
-    // Magick
+    
+    // // Magick
 
-    let cost_ratio = sell_result.sol_amount as f64 / Q32 as f64;
+    // let cost_ratio = sell_result.sol_amount as f64 / Q32 as f64;
 
-    let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
-    let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;
+    // let receive_token_0_amount = (receive_token_0_amount as f64 * cost_ratio).ceil() as u64;
+    // let receive_token_1_amount = (receive_token_1_amount as f64 * cost_ratio).ceil() as u64;
     
     pool_state.amm = amm;
     
@@ -180,13 +185,19 @@ pub fn withdraw(
         change_type: 1
     });
 
+    msg!("pool_state: {:?}", pool_state);
+    msg!("lp_token_amount: {}", lp_token_amount);
+
+    msg!("receive_token_0_amount: {:?}", receive_token_0_amount);
+    msg!("minimum_token_0_amount: {:?}", minimum_token_0_amount);
+    msg!("receive_token_1_amount: {:?}", receive_token_1_amount);
+    msg!("minimum_token_1_amount: {}", minimum_token_1_amount);
     if receive_token_0_amount < minimum_token_0_amount
         || receive_token_1_amount < minimum_token_1_amount
     {
         return Err(ErrorCode::ExceededSlippage.into());
     }
-
-    pool_state.lp_supply = pool_state.lp_supply.checked_sub(lp_token_amount).unwrap();
+    pool_state.lp_supply = pool_state.lp_supply.checked_sub(real_liquidity as u64).unwrap();
     token_burn(
         ctx.accounts.owner.to_account_info(),
         ctx.accounts.token_program.to_account_info(),

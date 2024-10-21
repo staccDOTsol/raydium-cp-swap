@@ -321,36 +321,49 @@ pub fn initialize(
     let mut observation_state = ctx.accounts.observation_state.load_init()?;
     observation_state.pool_id = ctx.accounts.pool_state.key();
 
+   
+
+    let virtual_liquidty = U128::from(init_amount_0)
+        .checked_mul(U128::from(init_amount_1))
+        .unwrap()
+        .checked_mul(U128::from(U128::from(2).checked_pow(U128::from(32)).unwrap()))
+        .unwrap()
+        .as_u128();
+
+    let lp_supply = U128::from(init_amount_0)
+        .checked_mul(U128::from(init_amount_1))
+        .unwrap()
+        .integer_sqrt()
+        .as_u64();
+
+    
     let mut amm = AMM::new(
-        DEFAULT_VIRTUAL_SOL_RESERVE,
+        virtual_liquidty,
         DEFUALT_VIRTUAL_TOKEN_RESERVE,
         0,
         DEFAULT_TOKEN_RESERVES,
         DEFUALT_INITIAL_VIRTUAL_TOKEN_RESERVE,
     );
 
-    let liquidity = U128::from(init_amount_0)
-        .checked_mul(U128::from(init_amount_1))
-        .unwrap()
-        .integer_sqrt()
-        .as_u64();
+    // let buy_result = amm.apply_buy(liquidity as u128);
+    // if buy_result.is_none() {
+    //     return err!(ErrorCode::BuyResultNone);
+    // }
+    // let buy_result = buy_result.unwrap();
+    // // Magick
 
+    // let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
 
-    let buy_result = amm.apply_buy(liquidity as u128);
-    if buy_result.is_none() {
-        return err!(ErrorCode::BuyResultNone);
-    }
-    let buy_result = buy_result.unwrap();
-    // Magick
-
-    let cost_ratio = buy_result.sol_amount as f64 / Q32 as f64;
-
-    let init_amount_0 = (init_amount_0 as f64 * cost_ratio).ceil() as u64;
-    let init_amount_1 = (init_amount_1 as f64 * cost_ratio).ceil() as u64;
-    
+    // let init_amount_0 = (init_amount_0 as f64 * cost_ratio).ceil() as u64;
+    // let init_amount_1 = (init_amount_1 as f64 * cost_ratio).ceil() as u64;
     pool_state.amm = amm;
 
-    
+    // msg!(
+    //     "cost ratio:{}, init_amount_0:{},init_amount_1:{}",
+    //     cost_ratio,
+    //     init_amount_0,
+    //     init_amount_1
+    // );
 
     transfer_from_user_to_pool_vault(
         ctx.accounts.creator.to_account_info(),
@@ -393,25 +406,34 @@ pub fn initialize(
 
     CurveCalculator::validate_supply(token_0_vault.amount, token_1_vault.amount)?;
 
-    let liquidity = U128::from(token_0_vault.amount)
-        .checked_mul(token_1_vault.amount.into())
+    // let liquidity = U128::from(token_0_vault.amount)
+    //     .checked_mul(token_1_vault.amount.into())
+    //     .unwrap()
+    //     .integer_sqrt()
+    //     .as_u64();
+    let to_mint = U128::from(init_amount_0)
+        .checked_mul(U128::from(init_amount_1))
+        .unwrap()
+        .checked_mul(U128::from(1u128<<32))
         .unwrap()
         .integer_sqrt()
         .as_u64();
-    let lock_lp_amount = 100;
-    msg!(
-        "liquidity:{}, lock_lp_amount:{}, vault_0_amount:{},vault_1_amount:{}",
-        liquidity,
-        lock_lp_amount,
-        token_0_vault.amount,
-        token_1_vault.amount
-    );
+    let lock_lp_amount = 1000000000;
+    
+    // msg!(
+    //     "liquidity:{}, lock_lp_amount:{}, vault_0_amount:{},vault_1_amount:{}",
+    //     liquidity,
+    //     lock_lp_amount,
+    //     token_0_vault.amount,
+    //     token_1_vault.amount
+    // );
+
     token::token_mint_to(
         ctx.accounts.authority.to_account_info(),
         ctx.accounts.token_program.to_account_info(),
         ctx.accounts.lp_mint.to_account_info(),
         ctx.accounts.creator_lp_token.to_account_info(),
-        liquidity
+        to_mint
             .checked_sub(lock_lp_amount)
             .ok_or(ErrorCode::InitLpAmountTooLess)?,
         &[&[crate::AUTH_SEED.as_bytes(), &[ctx.bumps.authority]]],
@@ -419,7 +441,7 @@ pub fn initialize(
 
     pool_state.initialize(
         ctx.bumps.authority,
-        liquidity,
+        lp_supply,
         open_time,
         ctx.accounts.winna_winna_chickum_dinna.key(),
         ctx.accounts.amm_config.key(),
