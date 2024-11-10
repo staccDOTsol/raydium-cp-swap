@@ -118,8 +118,9 @@ pub fn initialize_amm_config_instr(
     protocol_fee_rate: u64,
     fund_fee_rate: u64,
     create_pool_fee: u64,
+    program_id: Pubkey
 ) -> Result<Vec<Instruction>> {
-    let raydium_cp_swap_program_id = raydium_cp_swap::ID;
+    let raydium_cp_swap_program_id = program_id;
 
     let (amm_config_key, _bump) = Pubkey::find_program_address(
         &[AMM_CONFIG_SEED.as_bytes(), &amm_config_index.to_be_bytes()],
@@ -427,8 +428,9 @@ pub fn swap_base_input_instr(
     output_token_program: Pubkey,
     amount_in: u64,
     minimum_amount_out: u64,
+    program_id: Pubkey,
 ) -> Result<Vec<Instruction>> {
-    let raydium_cp_swap_program_id = raydium_cp_swap::ID;
+    let raydium_cp_swap_program_id = program_id;
 
     let (authority, __bump) =
         Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &raydium_cp_swap_program_id);
@@ -479,8 +481,9 @@ pub fn swap_base_output_instr(
     output_token_program: Pubkey,
     max_amount_in: u64,
     amount_out: u64,
+    program_id: Pubkey
 ) -> Result<Vec<Instruction>> {
-    let raydium_cp_swap_program_id = raydium_cp_swap::ID;
+    let raydium_cp_swap_program_id = program_id;
 
     let (authority, __bump) =
         Pubkey::find_program_address(&[AUTH_SEED.as_bytes()], &raydium_cp_swap_program_id);

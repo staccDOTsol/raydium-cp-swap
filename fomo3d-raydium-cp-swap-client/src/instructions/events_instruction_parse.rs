@@ -24,11 +24,12 @@ pub enum InstructionDecodeType {
 #[derive(Debug)]
 pub enum ChainInstructions {
     CreateAmmConfig {
+        tx_hash: String,
         index: u16,
-        trade_fee_rate: u64,
-        protocol_fee_rate: u64,
-        fund_fee_rate: u64,
-        create_pool_fee: u64,
+        token_0_lp_rate: u64,
+        token_1_lp_rate: u64,
+        token_0_creator_rate: u64,
+        token_1_creator_rate: u64,
     },
     UpdateAmmConfig {
         param: u8,
@@ -158,54 +159,54 @@ impl Execution {
     }
 }
 
-// pub fn handle_program_log(
-//     self_program_str: &str,
-//     l: &str,
-//     with_prefix: bool,
-// ) -> Result<(Option<String>, bool), ClientError> {
-//     // Log emitted from the current program.
-//     if let Some(log) = if with_prefix {
-//         l.strip_prefix(PROGRAM_LOG)
-//             .or_else(|| l.strip_prefix(PROGRAM_DATA))
-//     } else {
-//         Some(l)
-//     } {
-//         if l.starts_with(&format!("Program log:")) {
-//             // not log event
-//             return Ok((None, false));
-//         }
-//         let borsh_bytes = match anchor_lang::__private::base64::decode(log) {
-//             Ok(borsh_bytes) => borsh_bytes,
-//             _ => {
-//                 println!("Could not base64 decode log: {}", log);
-//                 return Ok((None, false));
-//             }
-//         };
+pub fn handle_program_log(
+    self_program_str: &str,
+    l: &str,
+    with_prefix: bool,
+) -> Result<(Option<String>, bool), ClientError> {
+    // Log emitted from the current program.
+    if let Some(log) = if with_prefix {
+        l.strip_prefix(PROGRAM_LOG)
+            .or_else(|| l.strip_prefix(PROGRAM_DATA))
+    } else {
+        Some(l)
+    } {
+        if l.starts_with(&format!("Program log:")) {
+            // not log event
+            return Ok((None, false));
+        }
+        let borsh_bytes = match anchor_lang::__private::base64::decode(log) {
+            Ok(borsh_bytes) => borsh_bytes,
+            _ => {
+                println!("Could not base64 decode log: {}", log);
+                return Ok((None, false));
+            }
+        };
 
-//         let mut slice: &[u8] = &borsh_bytes[..];
-//         let disc: [u8; 8] = {
-//             let mut disc = [0; 8];
-//             disc.copy_from_slice(&borsh_bytes[..8]);
-//             slice = &slice[8..];
-//             disc
-//         };
-//         match disc {
-//             SwapEvent::DISCRIMINATOR => {
-//                 println!("{:#?}", decode_event::<SwapEvent>(&mut slice)?);
-//             }
-//             LpChangeEvent::DISCRIMINATOR => {
-//                 println!("{:#?}", decode_event::<LpChangeEvent>(&mut slice)?);
-//             }
-//             _ => {
-//                 println!("unknow event: {}", l);
-//             }
-//         }
-//         return Ok((None, false));
-//     } else {
-//         let (program, did_pop) = handle_system_log(self_program_str, l);
-//         return Ok((program, did_pop));
-//     }
-// }
+        let mut slice: &[u8] = &borsh_bytes[..];
+        let disc: [u8; 8] = {
+            let mut disc = [0; 8];
+            disc.copy_from_slice(&borsh_bytes[..8]);
+            slice = &slice[8..];
+            disc
+        };
+        match disc {
+            SwapEvent::DISCRIMINATOR => {
+                println!("{:#?}", decode_event::<SwapEvent>(&mut slice)?);
+            }
+            LpChangeEvent::DISCRIMINATOR => {
+                println!("{:#?}", decode_event::<LpChangeEvent>(&mut slice)?);
+            }
+            _ => {
+                println!("unknow event: {}", l);
+            }
+        }
+        return Ok((None, false));
+    } else {
+        let (program, did_pop) = handle_system_log(self_program_str, l);
+        return Ok((program, did_pop));
+    }
+}
 
 fn handle_system_log(this_program_str: &str, log: &str) -> (Option<String>, bool) {
     if log.starts_with(&format!("Program {this_program_str} invoke")) {
@@ -231,6 +232,7 @@ fn decode_event<T: anchor_lang::Event + anchor_lang::AnchorDeserialize>(
 }
 
 pub fn parse_program_instruction(
+    tx_hash: String,
     self_program_str: &str,
     encoded_transaction: EncodedTransaction,
     meta: Option<UiTransactionStatusMeta>,
