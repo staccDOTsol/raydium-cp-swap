@@ -74,6 +74,7 @@ fn set_new_fund_owner(amm_config: &mut Account<AmmConfig>, new_fund_owner: Pubke
         amm_config.fund_owner.to_string(),
         new_fund_owner.key().to_string()
     );
+    // Stored for compatibility; not used for fee collection
     amm_config.fund_owner = new_fund_owner;
     Ok(())
 }

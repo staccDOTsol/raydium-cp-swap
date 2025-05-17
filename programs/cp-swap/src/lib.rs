@@ -121,7 +121,8 @@ pub mod raydium_cp_swap {
         instructions::collect_protocol_fee(ctx, amount_0_requested, amount_1_requested)
     }
 
-    /// Collect the fund fee accrued to the pool
+    /// Collect the fund fee accrued to the pool. The pool creator is
+    /// entitled to these funds.
     ///
     /// # Arguments
     ///
