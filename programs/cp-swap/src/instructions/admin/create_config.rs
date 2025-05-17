@@ -1,5 +1,6 @@
 use crate::error::ErrorCode;
 use crate::states::*;
+use crate::curve::fees::DEFAULT_FLAT_FEE;
 use anchor_lang::prelude::*;
 use std::ops::DerefMut;
 
@@ -42,7 +43,11 @@ pub fn create_amm_config(
     amm_config.bump = ctx.bumps.amm_config;
     amm_config.disable_create_pool = false;
     amm_config.index = index;
-    amm_config.trade_fee_rate = trade_fee_rate;
+    amm_config.trade_fee_rate = if trade_fee_rate == 0 {
+        DEFAULT_FLAT_FEE
+    } else {
+        trade_fee_rate
+    };
     amm_config.protocol_fee_rate = protocol_fee_rate;
     amm_config.fund_fee_rate = fund_fee_rate;
     amm_config.create_pool_fee = create_pool_fee;

@@ -51,7 +51,7 @@ pub mod raydium_cp_swap {
     ///
     /// * `ctx`- The accounts needed by instruction.
     /// * `index` - The index of amm config, there may be multiple config.
-    /// * `trade_fee_rate` - Trade fee rate, can be changed.
+    /// * `trade_fee_rate` - Flat trade fee amount.
     /// * `protocol_fee_rate` - The rate of protocol fee within trade fee.
     /// * `fund_fee_rate` - The rate of fund fee within trade fee.
     ///
@@ -63,7 +63,7 @@ pub mod raydium_cp_swap {
         fund_fee_rate: u64,
         create_pool_fee: u64,
     ) -> Result<()> {
-        assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
+        assert!(trade_fee_rate > 0);
         assert!(protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
         assert!(fund_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
         assert!(fund_fee_rate + protocol_fee_rate <= FEE_RATE_DENOMINATOR_VALUE);
