@@ -18,11 +18,13 @@ pub struct AmmConfig {
     pub protocol_fee_rate: u64,
     /// The fund fee, denominated in hundredths of a bip (10^-6)
     pub fund_fee_rate: u64,
-    /// Fee for create a new pool
+    /// Fee for creating a new pool. Currently unused as pool
+    /// creation no longer charges a fee.
     pub create_pool_fee: u64,
     /// Address of the protocol fee owner
     pub protocol_owner: Pubkey,
-    /// Address of the fund fee owner
+    /// Address of the fund fee owner. Currently unused as fund fees
+    /// are directed to the pool creator.
     pub fund_owner: Pubkey,
     /// padding
     pub padding: [u64; 16],

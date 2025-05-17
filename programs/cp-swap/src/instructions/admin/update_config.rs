@@ -29,7 +29,11 @@ pub fn update_amm_config(ctx: Context<UpdateAmmConfig>, param: u8, value: u64) -
             let new_fund_owner = *ctx.remaining_accounts.iter().next().unwrap().key;
             set_new_fund_owner(amm_config, new_fund_owner)?;
         }
-        Some(5) => amm_config.create_pool_fee = value,
+        Some(5) => {
+            // creator fee is disabled; ignore provided value
+            let _ = value;
+            amm_config.create_pool_fee = 0;
+        }
         Some(6) => amm_config.disable_create_pool = if value == 0 { false } else { true },
         _ => return err!(ErrorCode::InvalidInput),
     }
@@ -74,6 +78,7 @@ fn set_new_fund_owner(amm_config: &mut Account<AmmConfig>, new_fund_owner: Pubke
         amm_config.fund_owner.to_string(),
         new_fund_owner.key().to_string()
     );
+    // Stored for compatibility; not used for fee collection
     amm_config.fund_owner = new_fund_owner;
     Ok(())
 }

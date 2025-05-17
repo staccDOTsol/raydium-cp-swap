@@ -45,7 +45,11 @@ pub fn create_amm_config(
     amm_config.trade_fee_rate = trade_fee_rate;
     amm_config.protocol_fee_rate = protocol_fee_rate;
     amm_config.fund_fee_rate = fund_fee_rate;
-    amm_config.create_pool_fee = create_pool_fee;
+    // creator fee is now disabled, keep interface but set to zero
+    let _ = create_pool_fee; // ignore user provided value
+    amm_config.create_pool_fee = 0;
+    // Store fund owner for backwards compatibility; funds
+    // are now collected by the pool creator.
     amm_config.fund_owner = ctx.accounts.owner.key();
     Ok(())
 }

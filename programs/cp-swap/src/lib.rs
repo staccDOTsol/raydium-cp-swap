@@ -61,6 +61,8 @@ pub mod raydium_cp_swap {
         trade_fee_rate: u64,
         protocol_fee_rate: u64,
         fund_fee_rate: u64,
+        /// create_pool_fee parameter is ignored. Pool creation does not
+        /// charge a fee, but the argument is kept for backward compatibility.
         create_pool_fee: u64,
     ) -> Result<()> {
         assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
@@ -121,7 +123,8 @@ pub mod raydium_cp_swap {
         instructions::collect_protocol_fee(ctx, amount_0_requested, amount_1_requested)
     }
 
-    /// Collect the fund fee accrued to the pool
+    /// Collect the fund fee accrued to the pool. The pool creator is
+    /// entitled to these funds.
     ///
     /// # Arguments
     ///
