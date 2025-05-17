@@ -27,17 +27,17 @@ declare_id!("CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C");
 pub mod admin {
     use super::{pubkey, Pubkey};
     #[cfg(feature = "devnet")]
-    pub const ID: Pubkey = pubkey!("adMCyoCgfkg7bQiJ9aBJ59H3BXLY3r5LNLfPpQfMzBe");
+    pub const ID: Pubkey = pubkey!("89VB5UmvopuCFmp5Mf8YPX28fGvvqn79afCgouQuPyhY");
     #[cfg(not(feature = "devnet"))]
-    pub const ID: Pubkey = pubkey!("GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ");
+    pub const ID: Pubkey = pubkey!("89VB5UmvopuCFmp5Mf8YPX28fGvvqn79afCgouQuPyhY");
 }
 
 pub mod create_pool_fee_reveiver {
     use super::{pubkey, Pubkey};
     #[cfg(feature = "devnet")]
-    pub const ID: Pubkey = pubkey!("G11FKBRaAkHAKuLCgLM6K6NUc9rTjPAznRCjZifrTQe2");
+    pub const ID: Pubkey = pubkey!("42dvDR9xMUZ2eBm451H8ogonQh22btpxcfqtt1uDi6qC");
     #[cfg(not(feature = "devnet"))]
-    pub const ID: Pubkey = pubkey!("DNXgeM9EiiaAbaWvwjHj9fQQLAX5ZsfHyvmYUNRAdNC8");
+    pub const ID: Pubkey = pubkey!("42dvDR9xMUZ2eBm451H8ogonQh22btpxcfqtt1uDi6qC");
 }
 
 pub const AUTH_SEED: &str = "vault_and_lp_mint_auth_seed";
