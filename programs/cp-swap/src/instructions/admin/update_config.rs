@@ -29,7 +29,11 @@ pub fn update_amm_config(ctx: Context<UpdateAmmConfig>, param: u8, value: u64) -
             let new_fund_owner = *ctx.remaining_accounts.iter().next().unwrap().key;
             set_new_fund_owner(amm_config, new_fund_owner)?;
         }
-        Some(5) => amm_config.create_pool_fee = value,
+        // creator fee is deprecated; ignore provided value and set to zero
+        Some(5) => {
+            let _ = value; // preserve interface
+            amm_config.create_pool_fee = 0;
+        }
         Some(6) => amm_config.disable_create_pool = if value == 0 { false } else { true },
         _ => return err!(ErrorCode::InvalidInput),
     }

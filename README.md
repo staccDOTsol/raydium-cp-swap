@@ -46,6 +46,11 @@ git clone https://github.com/raydium-io/raydium-cp-swap
 cd raydium-cp-swap && yarn && anchor test
 ```
 
+### Creator fee
+
+The interface retains a `create_pool_fee` parameter for backwards compatibility,
+but this fee is now permanently set to `0` on chain.
+
 ## License
 
 Raydium constant product swap is licensed under the Apache License, Version 2.0.
