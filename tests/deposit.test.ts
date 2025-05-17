@@ -29,7 +29,7 @@ describe("deposit test", () => {
       owner,
       {
         config_index: 0,
-        tradeFeeRate: new BN(10),
+        tradeFeeRate: new BN(100000),
         protocolFeeRate: new BN(1000),
         fundFeeRate: new BN(25000),
         create_fee: new BN(0),
@@ -110,7 +110,7 @@ describe("deposit test", () => {
         owner,
         {
           config_index: 0,
-          tradeFeeRate: new BN(10),
+          tradeFeeRate: new BN(100000),
           protocolFeeRate: new BN(1000),
           fundFeeRate: new BN(25000),
           create_fee: new BN(0),
@@ -251,7 +251,7 @@ describe("deposit test", () => {
       owner,
       {
         config_index: 0,
-        tradeFeeRate: new BN(10),
+        tradeFeeRate: new BN(100000),
         protocolFeeRate: new BN(1000),
         fundFeeRate: new BN(25000),
         create_fee: new BN(0),

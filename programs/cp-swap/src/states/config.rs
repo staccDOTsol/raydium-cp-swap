@@ -12,7 +12,7 @@ pub struct AmmConfig {
     pub disable_create_pool: bool,
     /// Config index
     pub index: u16,
-    /// The trade fee, denominated in hundredths of a bip (10^-6)
+    /// The flat trade fee amount
     pub trade_fee_rate: u64,
     /// The protocol fee
     pub protocol_fee_rate: u64,

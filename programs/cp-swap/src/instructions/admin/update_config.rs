@@ -48,7 +48,7 @@ fn update_protocol_fee_rate(amm_config: &mut Account<AmmConfig>, protocol_fee_ra
 }
 
 fn update_trade_fee_rate(amm_config: &mut Account<AmmConfig>, trade_fee_rate: u64) {
-    assert!(trade_fee_rate < FEE_RATE_DENOMINATOR_VALUE);
+    assert!(trade_fee_rate > 0);
     amm_config.trade_fee_rate = trade_fee_rate;
 }
 
