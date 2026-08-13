@@ -317,8 +317,8 @@ pub mod raydium_cp_swap {
         instructions::create_lp_metadata(ctx, name, symbol, uri)
     }
 
-    /// Update the Metaplex metadata for the pool's LP token. Only the original
-    /// creator may update it.
+    /// Update the Metaplex metadata for the pool's LP token. The creator, the
+    /// pool creator, or the protocol admin may update it.
     ///
     /// # Arguments
     ///
@@ -334,5 +334,14 @@ pub mod raydium_cp_swap {
         uri: String,
     ) -> Result<()> {
         instructions::update_lp_metadata(ctx, name, symbol, uri)
+    }
+
+    /// Reclaim the LP metadata update authority. The permissionless
+    /// first-come-first-serve claim ("goldrush") is intentional, but it is a
+    /// liability risk: a griefer can front-run the pool creator, or the original
+    /// creator can lose their key. Escape hatch: the pool creator or the protocol
+    /// admin may reassign the updater to themselves.
+    pub fn reclaim_lp_metadata(ctx: Context<ReclaimLpMetadata>) -> Result<()> {
+        instructions::reclaim_lp_metadata(ctx)
     }
 }

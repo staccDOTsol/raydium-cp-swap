@@ -160,10 +160,11 @@ describe("lp metadata test", () => {
       program.methods
         .updateLpMetadata("HACK", "HACK", "https://example.com/hack.json")
         .accounts({
-          creator: second.publicKey,
+          updater: second.publicKey,
           poolState: poolAddress,
           lpMint,
           lpMetadataState,
+          ammConfig: configAddress,
           authority: auth,
           metadata,
           metadataProgram: METADATA_PROGRAM_ID,
@@ -180,10 +181,162 @@ describe("lp metadata test", () => {
         "https://example.com/meme2.json"
       )
       .accounts({
-        creator: owner.publicKey,
+        updater: owner.publicKey,
         poolState: poolAddress,
         lpMint,
         lpMetadataState,
+        ammConfig: configAddress,
+        authority: auth,
+        metadata,
+        metadataProgram: METADATA_PROGRAM_ID,
+      })
+      .rpc(confirmOptions);
+  });
+
+  it("reclaim_lp_metadata: pool creator overrides a front-running griefer", async () => {
+    // 1. Create a pool; `owner` is the pool creator.
+    const { configAddress, token0, token0Program, token1, token1Program } =
+      await setupInitializeTest(
+        program,
+        connection,
+        owner,
+        {
+          config_index: 0,
+          tradeFeeRate: new BN(10),
+          protocolFeeRate: new BN(1000),
+          fundFeeRate: new BN(25000),
+          create_fee: new BN(0),
+        },
+        { transferFeeBasisPoints: 0, MaxFee: 0 },
+        confirmOptions
+      );
+    const { poolAddress } = await initialize(
+      program,
+      owner,
+      configAddress,
+      token0,
+      token0Program,
+      token1,
+      token1Program,
+      confirmOptions,
+      { initAmount0: new BN(10000000000), initAmount1: new BN(10000000000) }
+    );
+
+    const [auth] = await getAuthAddress(program.programId);
+    const [lpMint] = await getPoolLpMintAddress(poolAddress, program.programId);
+    const [lpMetadataState] = await PublicKey.findProgramAddress(
+      [LP_METADATA_STATE_SEED, poolAddress.toBuffer()],
+      program.programId
+    );
+    const [metadata] = await PublicKey.findProgramAddress(
+      [METADATA_SEED, METADATA_PROGRAM_ID.toBuffer(), lpMint.toBuffer()],
+      METADATA_PROGRAM_ID
+    );
+
+    // Fund a second wallet that front-runs the metadata claim.
+    const second = Keypair.generate();
+    await sendAndConfirmTransaction(
+      connection,
+      new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: second.publicKey,
+          lamports: anchor.web3.LAMPORTS_PER_SOL,
+        })
+      ),
+      [owner]
+    );
+
+    // 2. The griefer claims the metadata first, becoming its creator.
+    await program.methods
+      .createLpMetadata("SQUATTER", "SQTR", "https://example.com/squat.json")
+      .accounts({
+        payer: second.publicKey,
+        poolState: poolAddress,
+        lpMint,
+        lpMetadataState,
+        authority: auth,
+        metadata,
+        createPoolFeeReveiver: CREATE_POOL_FEE_RECEIVER,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        metadataProgram: METADATA_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .signers([second])
+      .rpc(confirmOptions);
+
+    let state = await program.account.lpMetadataState.fetch(lpMetadataState);
+    assert.equal(state.creator.toString(), second.publicKey.toString());
+
+    // 3. A random third wallet cannot reclaim.
+    const third = Keypair.generate();
+    await sendAndConfirmTransaction(
+      connection,
+      new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: owner.publicKey,
+          toPubkey: third.publicKey,
+          lamports: anchor.web3.LAMPORTS_PER_SOL,
+        })
+      ),
+      [owner]
+    );
+    await assertRpcRejected(
+      program.methods
+        .reclaimLpMetadata()
+        .accounts({
+          reclaimer: third.publicKey,
+          poolState: poolAddress,
+          ammConfig: configAddress,
+          lpMetadataState,
+        })
+        .signers([third])
+        .rpc(confirmOptions)
+    );
+
+    // 3b. The pool creator can directly override the metadata without reclaiming.
+    await program.methods
+      .updateLpMetadata("OVERRIDE", "OVR", "https://example.com/override.json")
+      .accounts({
+        updater: owner.publicKey,
+        poolState: poolAddress,
+        lpMint,
+        lpMetadataState,
+        ammConfig: configAddress,
+        authority: auth,
+        metadata,
+        metadataProgram: METADATA_PROGRAM_ID,
+      })
+      .rpc(confirmOptions);
+
+    // 4. The pool creator reclaims the update authority from the griefer.
+    await program.methods
+      .reclaimLpMetadata()
+      .accounts({
+        reclaimer: owner.publicKey,
+        poolState: poolAddress,
+        ammConfig: configAddress,
+        lpMetadataState,
+      })
+      .rpc(confirmOptions);
+
+    state = await program.account.lpMetadataState.fetch(lpMetadataState);
+    assert.equal(state.creator.toString(), owner.publicKey.toString());
+
+    // 5. The pool creator can now update the metadata as the new creator.
+    await program.methods
+      .updateLpMetadata(
+        "RECLAIMED",
+        "RLM",
+        "https://example.com/reclaimed.json"
+      )
+      .accounts({
+        updater: owner.publicKey,
+        poolState: poolAddress,
+        lpMint,
+        lpMetadataState,
+        ammConfig: configAddress,
         authority: auth,
         metadata,
         metadataProgram: METADATA_PROGRAM_ID,

@@ -7,11 +7,15 @@ use anchor_spl::token_interface::Mint;
 
 #[derive(Accounts)]
 pub struct UpdateLpMetadata<'info> {
-    /// The creator who first created the LP metadata, the only one allowed to update it.
-    pub creator: Signer<'info>,
+    /// The creator, the pool creator, or the protocol admin — any may update.
+    pub updater: Signer<'info>,
 
     /// Pool state, used to derive the lp mint and the metadata state PDA.
     pub pool_state: AccountLoader<'info, PoolState>,
+
+    /// Amm config account storing the protocol owner.
+    #[account(address = pool_state.load()?.amm_config)]
+    pub amm_config: Account<'info, AmmConfig>,
 
     /// The LP mint whose metadata is being updated.
     #[account(
@@ -62,9 +66,14 @@ pub fn update_lp_metadata(
     symbol: String,
     uri: String,
 ) -> Result<()> {
-    // Only the creator who created the metadata may update it.
+    // The creator, the pool creator, or the protocol admin may update it.
+    let updater = ctx.accounts.updater.key();
+    let is_creator = updater == ctx.accounts.lp_metadata_state.creator;
+    let is_pool_creator = updater == ctx.accounts.pool_state.load()?.pool_creator;
+    let is_admin =
+        updater == ctx.accounts.amm_config.protocol_owner || updater == crate::admin::ID;
     require!(
-        ctx.accounts.creator.key() == ctx.accounts.lp_metadata_state.creator,
+        is_creator || is_pool_creator || is_admin,
         ErrorCode::NotLpMetadataCreator
     );
 

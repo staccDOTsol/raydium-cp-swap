@@ -25,3 +25,6 @@ pub use create_lp_metadata::*;
 
 pub mod update_lp_metadata;
 pub use update_lp_metadata::*;
+
+pub mod reclaim_lp_metadata;
+pub use reclaim_lp_metadata::*;
