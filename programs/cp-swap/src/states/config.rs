@@ -22,7 +22,8 @@ pub struct AmmConfig {
     pub create_pool_fee: u64,
     /// Address of the protocol fee owner
     pub protocol_owner: Pubkey,
-    /// Address of the fund fee owner
+    /// Address of the fund fee owner. Currently unused as fund fees
+    /// are directed to the pool creator.
     pub fund_owner: Pubkey,
     /// The pool creator fee, denominated in hundredths of a bip (10^-6)
     pub creator_fee_rate: u64,

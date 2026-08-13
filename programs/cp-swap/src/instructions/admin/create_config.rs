@@ -47,6 +47,8 @@ pub fn create_amm_config(
     amm_config.protocol_fee_rate = protocol_fee_rate;
     amm_config.fund_fee_rate = fund_fee_rate;
     amm_config.create_pool_fee = create_pool_fee;
+    // Store fund owner for backwards compatibility; funds
+    // are now collected by the pool creator.
     amm_config.fund_owner = ctx.accounts.owner.key();
     amm_config.creator_fee_rate = creator_fee_rate;
     Ok(())
