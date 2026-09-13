@@ -30,6 +30,9 @@ pub enum RuleKind {
     /// (`total_lamports / pool_token_supply`) and can be re-read permissionlessly with
     /// `sync_member_rate`.
     Lst = 3,
+    /// Mint is the base token of a Meteora dynamic-bonding-curve launch whose `PoolConfig.fee_claimer`
+    /// is the ruleset's `program_id` field (our launchpad partner PDA). Proof: `[virtual_pool, pool_config]`.
+    LaunchpadDbc = 4,
 }
 impl RuleKind {
     pub fn from_u8(v: u8) -> Option<Self> {
@@ -38,6 +41,7 @@ impl RuleKind {
             1 => Some(Self::PumpFunLaunch),
             2 => Some(Self::ImmutableMint),
             3 => Some(Self::Lst),
+            4 => Some(Self::LaunchpadDbc),
             _ => None,
         }
     }
