@@ -48,13 +48,15 @@ pub fn rebalance_swap_base_input(
     amount_in: u64,
     minimum_amount_out: u64,
 ) -> Result<()> {
+    // Never below 1 ppm: a zero fee rate would make the creator-fee split divide by zero.
     let fee_rate = ctx
         .accounts
         .swap
         .amm_config
         .trade_fee_rate
         .checked_div(u64::from(ctx.accounts.collection.rebalance_fee_divisor))
-        .ok_or(ErrorCode::InvalidInput)?;
+        .ok_or(ErrorCode::InvalidInput)?
+        .max(1);
     let guard = RebalanceGuard {
         input_rate: ctx.accounts.input_member.rate,
         output_rate: ctx.accounts.output_member.rate,
