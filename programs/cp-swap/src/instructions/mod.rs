@@ -28,3 +28,6 @@ pub use collection::*;
 
 pub mod rebalance_swap_base_input;
 pub use rebalance_swap_base_input::*;
+
+pub mod collection_pool;
+pub use collection_pool::*;

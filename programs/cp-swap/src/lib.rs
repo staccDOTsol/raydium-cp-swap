@@ -413,6 +413,42 @@ pub mod raydium_cp_swap {
         instructions::rebalance_swap_base_input(ctx, amount_in, minimum_amount_out)
     }
 
+    /// Collection pools
+    ///
+    /// A pair that contains a collection's quote mint can bind to that collection. Other members of
+    /// the collection get their own vaults under the pool, and any two members (the pair's base token
+    /// included) swap directly against each other inside the pool: `intra_swap`, priced by a
+    /// StableSwap over the members' rate-normalised reserves, so the price is the collection rate at
+    /// balance and bends as the pool skews. Fee is `trade_fee_rate / rebalance_fee_divisor`.
+    /// The pair's own curve against the quote is unchanged (extra swaps).
+
+    /// Bind a pair to a collection. Pool creator or admin. `amp` is the StableSwap amplification.
+    pub fn init_pool_members(ctx: Context<InitPoolMembers>, amp: u64) -> Result<()> {
+        instructions::init_pool_members(ctx, amp)
+    }
+
+    /// Add a collection member to the pool (creates its vault). Permissionless.
+    pub fn add_pool_member(ctx: Context<AddPoolMember>) -> Result<()> {
+        instructions::add_pool_member(ctx)
+    }
+
+    /// Swap member `from_index` for member `to_index` inside the pool.
+    /// Remaining accounts: for every member k, `[member vault k, CollectionMember k]`.
+    pub fn intra_swap<'info>(
+        ctx: Context<'info, IntraSwap<'info>>,
+        from_index: u8,
+        to_index: u8,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> Result<()> {
+        instructions::intra_swap(ctx, from_index, to_index, amount_in, minimum_amount_out)
+    }
+
+    /// Collect protocol (kind 0) or fund (kind 1) fees from a non-base member vault.
+    pub fn collect_member_fees(ctx: Context<CollectMemberFees>, member_index: u8, kind: u8) -> Result<()> {
+        instructions::collect_member_fees(ctx, member_index, kind)
+    }
+
     /// Create support token22 mint account which can create pool and send rewards while ignoring unsupported extensions.
     pub fn create_support_mint_associated(ctx: Context<CreateSupportMintAssociated>) -> Result<()> {
         instructions::create_support_mint_associated(ctx)
