@@ -331,6 +331,88 @@ pub mod raydium_cp_swap {
         instructions::swap_base_output(ctx, max_amount_in, amount_out)
     }
 
+    /// Token collections
+    ///
+    /// A ruleset is an admin-defined admission rule (e.g. "standard non-mayhem pump.fun launch").
+    /// Anyone may create a collection that points at a ruleset, and anyone may register a mint
+    /// into a collection by supplying the accounts that prove the rule holds. Pools whose two mints
+    /// are members of one collection gain a discounted `rebalance_swap_base_input` path.
+
+    /// Create an admission ruleset. Admin only.
+    ///
+    /// * `index` - ruleset seed
+    /// * `kind` - `RuleKind` (0 any, 1 pump.fun launch, 2 immutable mint)
+    /// * `flags` - kind-specific flags (pump.fun: 1 allow mayhem, 2 require complete)
+    /// * `program_id` - program whose accounts prove the rule (pump.fun program for kind 1)
+    pub fn create_ruleset(
+        ctx: Context<CreateRuleset>,
+        index: u16,
+        kind: u8,
+        flags: u8,
+        program_id: Pubkey,
+    ) -> Result<()> {
+        instructions::create_ruleset(ctx, index, kind, flags, program_id)
+    }
+
+    /// Update an admission ruleset. Admin only.
+    pub fn update_ruleset(
+        ctx: Context<UpdateRuleset>,
+        kind: u8,
+        flags: u8,
+        program_id: Pubkey,
+    ) -> Result<()> {
+        instructions::update_ruleset(ctx, kind, flags, program_id)
+    }
+
+    /// Create a token collection bound to a ruleset. Permissionless.
+    ///
+    /// * `index` - collection seed, scoped by the creator
+    /// * `rebalance_fee_divisor` - rebalance swaps pay `trade_fee_rate / divisor`
+    pub fn create_token_collection(
+        ctx: Context<CreateTokenCollection>,
+        index: u16,
+        rebalance_fee_divisor: u32,
+    ) -> Result<()> {
+        instructions::create_token_collection(ctx, index, rebalance_fee_divisor)
+    }
+
+    /// Update a token collection. Collection authority only.
+    ///
+    /// * `param` - 0 rebalance_fee_divisor, 1 new authority (first remaining account)
+    pub fn update_token_collection(
+        ctx: Context<UpdateTokenCollection>,
+        param: u8,
+        value: u64,
+    ) -> Result<()> {
+        instructions::update_token_collection(ctx, param, value)
+    }
+
+    /// Register a mint into a collection after checking the ruleset against the supplied proof
+    /// accounts (remaining accounts). Permissionless.
+    pub fn register_collection_member<'info>(
+        ctx: Context<'info, RegisterCollectionMember<'info>>,
+    ) -> Result<()> {
+        instructions::register_collection_member(ctx)
+    }
+
+    /// Set a member's value in the collection numeraire (1e9 == 1.0). Collection authority only.
+    pub fn set_collection_member_rate(ctx: Context<SetCollectionMemberRate>, rate: u64) -> Result<()> {
+        instructions::set_collection_member_rate(ctx, rate)
+    }
+
+    /// Swap base input at `trade_fee_rate / collection.rebalance_fee_divisor`. Both pool mints must be
+    /// members of `collection`, and the swap must strictly reduce the pool's rate-weighted imbalance.
+    ///
+    /// * `amount_in` - input amount to transfer
+    /// * `minimum_amount_out` - minimum output, prevents excessive slippage
+    pub fn rebalance_swap_base_input(
+        ctx: Context<RebalanceSwap>,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> Result<()> {
+        instructions::rebalance_swap_base_input(ctx, amount_in, minimum_amount_out)
+    }
+
     /// Create support token22 mint account which can create pool and send rewards while ignoring unsupported extensions.
     pub fn create_support_mint_associated(ctx: Context<CreateSupportMintAssociated>) -> Result<()> {
         instructions::create_support_mint_associated(ctx)

@@ -42,4 +42,12 @@ pub enum ErrorCode {
     NoFeeCollect,
     #[msg("Lamports calculate error")]
     LamportsCalculateError,
+    #[msg("Unknown rule kind")]
+    InvalidRuleKind,
+    #[msg("Mint does not satisfy the collection ruleset")]
+    RuleCheckFailed,
+    #[msg("Collection member does not belong to this collection or mint")]
+    InvalidCollectionMember,
+    #[msg("Rebalance swap must strictly reduce the pool's imbalance")]
+    NotRebalancing,
 }

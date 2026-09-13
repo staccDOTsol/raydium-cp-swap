@@ -15,3 +15,6 @@ pub use permission::*;
 
 pub mod support_mint_associated;
 pub use support_mint_associated::*;
+
+pub mod collection;
+pub use collection::*;
