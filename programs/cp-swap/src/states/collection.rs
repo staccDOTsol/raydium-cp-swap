@@ -6,6 +6,11 @@ pub const COLLECTION_MEMBER_SEED: &str = "collection_member";
 
 /// Rates are expressed with 1e9 == 1.0 (a member's value in the collection's numeraire).
 pub const RATE_ONE: u64 = 1_000_000_000;
+/// Within a ruleset, members are 1:1 with the quote mint and with each other by default: a stable is a
+/// stable, an LST is an LST. The rate only defines what "balanced" means for the rebalance fee gate;
+/// every trade is still priced by the pool's curve, so a 1:1 default can never drain a pool at par.
+/// The collection authority may override a member's rate (e.g. an LST's exchange rate).
+pub const DEFAULT_MEMBER_RATE: u64 = RATE_ONE;
 
 /// Kinds of admission rule a ruleset can enforce. Rules read only the mint and the proof accounts
 /// the registrant supplies; they never depend on who is calling.
@@ -91,7 +96,8 @@ pub struct CollectionMember {
     pub padding0: [u8; 7],
     pub collection: Pubkey,
     pub mint: Pubkey,
-    /// Value of one whole token in the collection's numeraire, 1e9 == 1.0. Defaults to 1.0.
+    /// Value of one whole token in the collection's numeraire, 1e9 == 1.0.
+    /// Defaults to `DEFAULT_MEMBER_RATE` (1:1 within the ruleset).
     pub rate: u64,
     /// Who registered the member
     pub registered_by: Pubkey,

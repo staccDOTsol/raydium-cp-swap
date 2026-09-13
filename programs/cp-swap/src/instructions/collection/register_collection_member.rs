@@ -40,7 +40,7 @@ pub fn register_collection_member<'info>(
     member.bump = ctx.bumps.member;
     member.collection = ctx.accounts.collection.key();
     member.mint = ctx.accounts.mint.key();
-    member.rate = RATE_ONE;
+    member.rate = DEFAULT_MEMBER_RATE;
     member.registered_by = ctx.accounts.payer.key();
     ctx.accounts.collection.member_count = ctx.accounts.collection.member_count.saturating_add(1);
     emit!(CollectionMemberRegistered {
