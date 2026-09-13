@@ -16,6 +16,8 @@ pub struct CreateTokenCollection<'info> {
     /// Collection numeraire; admitted without a rule check
     pub quote_mint: Box<InterfaceAccount<'info, Mint>>,
 
+    /// Optional second mint admitted without a rule check (remaining account 0)
+
     #[account(
         init,
         seeds = [TOKEN_COLLECTION_SEED.as_bytes(), authority.key().as_ref(), &index.to_le_bytes()],
@@ -40,6 +42,7 @@ pub fn create_token_collection(
     collection.authority = ctx.accounts.authority.key();
     collection.ruleset = ctx.accounts.ruleset.key();
     collection.quote_mint = ctx.accounts.quote_mint.key();
+    collection.anchor_mint = ctx.remaining_accounts.first().map(|a| a.key()).unwrap_or_default();
     collection.rebalance_fee_divisor = rebalance_fee_divisor;
     Ok(())
 }

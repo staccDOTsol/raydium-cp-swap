@@ -660,3 +660,25 @@ fn launchpad_dbc_rule() {
     let d = e.data(&e.member(&c, &meme));
     assert_eq!((pk(&d, 16), pk(&d, 48), u64::from_le_bytes(d[80..88].try_into().unwrap())), (c, meme, RATE_ONE));
 }
+
+#[test]
+fn anchor_mint_is_admitted_without_rule() {
+    let mut e = Env::new();
+    let admin = e.admin.insecure_clone();
+    let payer = e.payer.insecure_clone();
+    let partner = Address::new_unique();
+    e.ok(&[e.create_ruleset(8, 4, 0, partner)], &[&admin]);
+    let protocol = e.fake_mint(true, false); // not a DBC launch, would fail the rule
+    // collection with anchor_mint = protocol (remaining account 0)
+    let mut ix = e.create_collection(8, 8, a(WSOL), 100);
+    ix.accounts.push(r(protocol));
+    e.ok(&[ix], &[]);
+    let (c, rs) = (e.collection(&payer.pubkey(), 8), e.ruleset(8));
+    assert_eq!(pk(&e.data(&c), 120), protocol, "anchor_mint stored");
+    e.ok(&[e.register(c, rs, a(WSOL), &[]), e.register(c, rs, protocol, &[])], &[]);
+    let stranger = e.fake_mint(true, false);
+    e.fails_with(&[e.register(c, rs, stranger, &[])], &[], "RuleCheckFailed");
+    // without an anchor the same mint is refused
+    e.ok(&[e.create_collection(8, 9, a(WSOL), 100)], &[]);
+    e.fails_with(&[e.register(e.collection(&payer.pubkey(), 9), rs, protocol, &[])], &[], "RuleCheckFailed");
+}
