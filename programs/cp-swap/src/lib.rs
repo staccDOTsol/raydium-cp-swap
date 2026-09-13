@@ -341,7 +341,7 @@ pub mod raydium_cp_swap {
     /// Create an admission ruleset. Admin only.
     ///
     /// * `index` - ruleset seed
-    /// * `kind` - `RuleKind` (0 any, 1 pump.fun launch, 2 immutable mint)
+    /// * `kind` - `RuleKind` (0 any, 1 pump.fun launch, 2 immutable mint, 3 stake-pool LST)
     /// * `flags` - kind-specific flags (pump.fun: 1 allow mayhem, 2 require complete)
     /// * `program_id` - program whose accounts prove the rule (pump.fun program for kind 1)
     pub fn create_ruleset(
@@ -398,6 +398,11 @@ pub mod raydium_cp_swap {
     /// Set a member's value in the collection numeraire (1e9 == 1.0). Collection authority only.
     pub fn set_collection_member_rate(ctx: Context<SetCollectionMemberRate>, rate: u64) -> Result<()> {
         instructions::set_collection_member_rate(ctx, rate)
+    }
+
+    /// Re-read an LST member's rate from its stake pool (`Lst` rulesets). Permissionless.
+    pub fn sync_member_rate(ctx: Context<SyncMemberRate>) -> Result<()> {
+        instructions::sync_member_rate(ctx)
     }
 
     /// Swap base input at `trade_fee_rate / collection.rebalance_fee_divisor`. Both pool mints must be

@@ -316,7 +316,7 @@ fn ruleset_admin_gating_and_validation() {
     ix.accounts[0] = s(payer.pubkey());
     e.fails_with(&[ix], &[], "InvalidOwner");
     // bad params
-    e.fails_with(&[e.create_ruleset(1, 3, 0, a(PUMP))], &[&admin], "InvalidRuleKind");
+    e.fails_with(&[e.create_ruleset(1, 9, 0, a(PUMP))], &[&admin], "InvalidRuleKind");
     e.fails_with(&[e.create_ruleset(1, KIND_PUMP, 0, Address::default())], &[&admin], "InvalidInput");
     e.fails_with(&[e.create_ruleset(1, KIND_PUMP, 4, a(PUMP))], &[&admin], "InvalidInput");
     e.fails_with(&[e.create_ruleset(1, KIND_ANY, 1, Address::default())], &[&admin], "InvalidInput");
@@ -529,4 +529,69 @@ fn rebalance_swap_gating_and_fee() {
     e.ok(&[e.update_collection(&payer.pubkey(), c, 0, 10_000, None)], &[]);
     let m = e.ok(&[e.rebalance(false, leg / 2, c)], &[]);
     assert_eq!(swap_event_trade_fee(&m), ceil_fee(leg / 2, 1));
+}
+
+// ---------------------------------------------------------------- LST rule: stake pool proof and rate sync
+
+const STAKE_POOL_PROGRAM: &str = "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy";
+/// SPL stake pool account: type 1, pool_mint @162, total_lamports @258, pool_token_supply @266
+fn fake_stake_pool(e: &mut Env, mint: &Address, total_lamports: u64, supply: u64, owner: Address, account_type: u8) -> Address {
+    let k = Address::new_unique();
+    let mut d = vec![0u8; 611];
+    d[0] = account_type;
+    d[162..194].copy_from_slice(mint.as_ref());
+    d[258..266].copy_from_slice(&total_lamports.to_le_bytes());
+    d[266..274].copy_from_slice(&supply.to_le_bytes());
+    e.svm.set_account(k, Account { lamports: 10_000_000, data: d, owner, executable: false, rent_epoch: 0 }).unwrap();
+    k
+}
+
+#[test]
+fn lst_rule_and_rate_sync() {
+    let mut e = Env::new();
+    let admin = e.admin.insecure_clone();
+    let payer = e.payer.insecure_clone();
+    let sp = a(STAKE_POOL_PROGRAM);
+    e.fails_with(&[e.create_ruleset(5, 3, 1, sp)], &[&admin], "InvalidInput");
+    e.fails_with(&[e.create_ruleset(5, 3, 0, Address::default())], &[&admin], "InvalidInput");
+    e.ok(&[e.create_ruleset(5, 3, 0, sp)], &[&admin]);
+    e.ok(&[e.create_collection(5, 5, a(WSOL), 100)], &[]);
+    let (c, rs) = (e.collection(&payer.pubkey(), 5), e.ruleset(5));
+    let lst = e.fake_mint(true, false); // LST mints keep their (stake pool) mint authority
+    // 1.15 SOL per LST
+    let pool = fake_stake_pool(&mut e, &lst, 1_150_000 * 1_000_000_000, 1_000_000 * 1_000_000_000, sp, 1);
+    // proofs that must fail: missing, wrong owner, wrong type, wrong mint
+    e.fails_with(&[e.register(c, rs, lst, &[])], &[], "RuleCheckFailed");
+    let wrong_owner = fake_stake_pool(&mut e, &lst, 1, 1, a(SYSTEM), 1);
+    e.fails_with(&[e.register(c, rs, lst, &[wrong_owner])], &[], "RuleCheckFailed");
+    let wrong_type = fake_stake_pool(&mut e, &lst, 1, 1, sp, 2);
+    e.fails_with(&[e.register(c, rs, lst, &[wrong_type])], &[], "RuleCheckFailed");
+    let other_mint = e.fake_mint(true, false);
+    let other_pool = fake_stake_pool(&mut e, &other_mint, 1, 1, sp, 1);
+    e.fails_with(&[e.register(c, rs, lst, &[other_pool])], &[], "RuleCheckFailed");
+    // valid: registers at the live exchange rate, not 1:1
+    e.ok(&[e.register(c, rs, a(WSOL), &[]), e.register(c, rs, lst, &[pool])], &[]);
+    let member = e.member(&c, &lst);
+    let rate = |e: &Env| u64::from_le_bytes(e.data(&member)[80..88].try_into().unwrap());
+    assert_eq!(rate(&e), 1_150_000_000);
+    // the pool earns yield: anyone re-syncs the rate, no signer
+    let mut pd = e.svm.get_account(&pool).unwrap();
+    pd.data[258..266].copy_from_slice(&(1_200_000u64 * 1_000_000_000).to_le_bytes());
+    e.svm.set_account(pool, pd).unwrap();
+    let sync = |e: &Env, member: Address, proof: Address| e.ix(vec![r(c), r(rs), w(member), r(proof)], disc("global:sync_member_rate"));
+    e.ok(&[sync(&e, member, pool)], &[]);
+    assert_eq!(rate(&e), 1_200_000_000);
+    // sync rejects: another pool, the quote member, a non-Lst ruleset
+    e.fails_with(&[sync(&e, member, other_pool)], &[], "RuleCheckFailed");
+    e.fails_with(&[sync(&e, e.member(&c, &a(WSOL)), pool)], &[], "InvalidCollectionMember");
+    e.ok(&[e.create_ruleset(6, KIND_ANY, 0, Address::default())], &[&admin]);
+    e.ok(&[e.create_collection(6, 6, a(WSOL), 100)], &[]);
+    let c6 = e.collection(&payer.pubkey(), 6);
+    e.ok(&[e.register(c6, e.ruleset(6), lst, &[])], &[]);
+    e.fails_with(&[e.ix(vec![r(c6), r(e.ruleset(6)), w(e.member(&c6, &lst)), r(pool)], disc("global:sync_member_rate"))], &[], "InvalidRuleKind");
+    // empty pool: rate falls back to 1:1
+    let fresh = e.fake_mint(true, false);
+    let empty = fake_stake_pool(&mut e, &fresh, 0, 0, sp, 1);
+    e.ok(&[e.register(c, rs, fresh, &[empty])], &[]);
+    assert_eq!(u64::from_le_bytes(e.data(&e.member(&c, &fresh))[80..88].try_into().unwrap()), RATE_ONE);
 }
